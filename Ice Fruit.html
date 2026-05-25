@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> 多人連線 1~500 賓果遊戲 </title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #1a1d20; color: #fff; }
+    .bingo-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      max-width: 450px;
+      margin: 0 auto;
+    }
+    .bingo-cell {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      font-weight: bold;
+      background-color: #2b3035;
+      border: 2px solid #495057;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .bingo-cell input {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      border: none;
+      color: #ffc107;
+      text-align: center;
+      font-weight: bold;
+      font-size: 1.3rem;
+    }
+    .bingo-cell input:focus { outline: none; background-color: rgba(255, 193, 7, 0.1); border-radius: 6px; }
+    .bingo-cell input::-webkit-outer-spin-button, .bingo-cell input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .bingo-cell input[type=number] { -moz-appearance: textfield; }
+    .bingo-cell.marked { background-color: #198754 !important; border-color: #157347; color: white; }
+    .draw-zone { background-color: #212529; border: 2px dashed #ffc107; border-radius: 10px; max-width: 450px; margin: 0 auto; }
+    .room-zone { background-color: #2c3034; border-radius: 10px; max-width: 450px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+
+<div class="container py-4 text-center">
+  <h1 class="mb-2 text-warning fw-bold"> 1~500 多人連線賓果</h1>
+  <p class="text-secondary small">輸入房號!立刻開始賓果!</p>
+
+  <div class="room-zone p-3 mb-4 shadow">
+    <h6 class="text-info fw-bold mb-3">請輸入暱稱與連線房號</h6>
+    
+    <div class="mb-3" style="max-width: 320px; margin: 0 auto;">
+      <input type="text" id="player-name-input" class="form-control text-center" placeholder="請輸入你的玩家暱稱 (必填)">
+    </div>
+
+    <div class="input-group mb-2" style="max-width: 320px; margin: 0 auto;">
+      <input type="text" id="room-id-input" class="form-control text-center fw-bold" placeholder="輸入4位數房號">
+      <button id="btn-create-room" class="btn btn-info fw-bold" disabled>建立房間</button>
+      <button id="btn-join-room" class="btn btn-outline-info fw-bold" disabled>加入房間</button>
+    </div>
+    <div id="connection-status" class="small text-warning fw-bold mt-2">請先完成下方「鎖定數字」再建立/加入房間！</div>
+  </div>
+
+  <div class="draw-zone p-3 mb-4 shadow">
+    <h5 class="text-secondary small">【 抽號顯示區 】</h5>
+    <div id="current-draw" class="display-1 fw-bold text-warning my-2">--</div>
+    <button id="btn-draw" class="btn btn-warning fw-bold px-4" disabled> 隨機抽號 </button>
+    <div id="draw-history" class="small text-muted mt-2 text-wrap" style="max-width: 100%;">已抽過：無</div>
+  </div>
+
+  <div class="mb-3">
+    <span class="badge bg-primary fs-6 p-2 me-2">當前連線：<span id="line-count">0</span> 條線</span>
+    <span id="game-status" class="badge bg-secondary fs-6 p-2 fw-bold">狀態：請先在格子內填寫數字</span>
+  </div>
+
+  <div class="bingo-grid mb-4" id="bingo-board"></div>
+
+  <div class="mb-5" id="setup-buttons">
+    <button id="btn-random-fill" class="btn btn-danger me-2"> 幫我隨機填滿空位</button>
+    <button id="btn-clear" class="btn btn-outline-secondary me-2"> 全部清空</button>
+    <button id="btn-start" class="btn btn-success px-4 fw-bold"> 鎖定數字，準備開始！</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+<script>
+  // 💥 免費公共雲端資料庫（免註冊，直接發布到 Git 就能跨國跨電腦連線）
+  const firebaseConfig = {
+    databaseURL: "https://bingo-500-default-rtdb.firebaseio.com/"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const database = firebase.database();
+
+  let markedIndices = new Set();
+  let isGameStarted = false;
+  let currentRoomId = null;
+  let playerName = "無名氏";
+
+  // 初始化空白棋盤
+  function initBoard() {
+    const board = document.getElementById('bingo-board');
+    board.innerHTML = '';
+    markedIndices.clear();
+    for (let i = 0; i < 25; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'bingo-cell';
+      const input = document.createElement('input');
+      input.type = 'number'; input.min = 1; input.max = 500; input.placeholder = '?';
+      cell.appendChild(input);
+      board.appendChild(cell);
+    }
+  }
+
+  // 智慧型填滿數字
+  document.getElementById('btn-random-fill').addEventListener('click', () => {
+    if (isGameStarted) return;
+    const inputs = document.querySelectorAll('.bingo-cell input');
+    let pool = new Set();
+    inputs.forEach(input => {
+      let val = parseInt(input.value);
+      if (!isNaN(val) && val >= 1 && val <= 500) pool.add(val);
+    });
+    inputs.forEach(input => {
+      let val = parseInt(input.value);
+      if (isNaN(val) || val < 1 || val > 500) {
+        let rand;
+        do { rand = Math.floor(Math.random() * 500) + 1; } while (pool.has(rand));
+        pool.add(rand);
+        input.value = rand;
+      }
+    });
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    if (isGameStarted) return;
+    document.querySelectorAll('.bingo-cell input').forEach(input => input.value = '');
+  });
+
+  // 鎖定卡片數字，解鎖房間按鈕
+  document.getElementById('btn-start').addEventListener('click', () => {
+    const inputs = document.querySelectorAll('.bingo-cell input');
+    let enteredNumbers = [];
+    let checkSet = new Set();
+    let hasEmpty = false, hasOutOfRange = false;
+
+    inputs.forEach(input => {
+      let val = parseInt(input.value);
+      if (isNaN(val)) hasEmpty = true;
+      else if (val < 1 || val > 500) hasOutOfRange = true;
+      else { enteredNumbers.push(val); checkSet.add(val); }
+    });
+
+    if (hasEmpty) { alert(" 請把 25 個格子全部填滿！"); return; }
+    if (hasOutOfRange) { alert(" 數字必須在 1 到 500 之間！"); return; }
+    if (checkSet.size < 25) { alert(" 數字不能重複！"); return; }
+
+    isGameStarted = true;
+    
+    // 將輸入框固化為點擊式格子
+    const cells = document.querySelectorAll('.bingo-cell');
+    cells.forEach((cell, index) => {
+      let finalNum = enteredNumbers[index];
+      cell.innerHTML = finalNum;
+      cell.addEventListener('click', () => {
+        if (currentRoomId === null) { alert("請先建立或加入一個連線房間！"); return; }
+        if (markedIndices.has(index)) { markedIndices.delete(index); cell.classList.remove('marked'); }
+        else { markedIndices.add(index); cell.classList.add('marked'); }
+        checkBingo();
+      });
+    });
+
+    // 解鎖連線功能
+    document.getElementById('btn-random-fill').disabled = true;
+    document.getElementById('btn-clear').disabled = true;
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-create-room').disabled = false;
+    document.getElementById('btn-join-room').disabled = false;
+    document.getElementById('connection-status').innerText = " 數字鎖定成功！請輸入暱稱後建立或加入房間。";
+    document.getElementById('game-status').innerText = "狀態：等待加入連線房間...";
+    document.getElementById('game-status').className = "badge bg-warning text-dark fs-6 p-2 fw-bold";
+  });
+
+  // 🛠️ 多人連線邏輯一：房長建立房間
+  document.getElementById('btn-create-room').addEventListener('click', () => {
+    let nameInput = document.getElementById('player-name-input').value.trim();
+    if (nameInput === "") { alert(" 建立房間前，請先輸入玩家暱稱！"); return; }
+    playerName = nameInput;
+
+    // 隨機產生一個4位數房號
+    let roomId = Math.floor(1000 + Math.random() * 9000).toString();
+    currentRoomId = roomId;
+
+    // 上傳到 Firebase 雲端初始化
+    database.ref('rooms/' + roomId).set({
+      currentDraw: "--",
+      drawnPool: "",
+      winnerName: ""  /* 用來存是誰全部圈完贏了 */
+    }).then(() => {
+      lockRoomUI(roomId);
+      document.getElementById('connection-status').innerText = ` 成功建立房號【 ${roomId} 】！快叫朋友們加入這間房間！`;
+      listenToRoom(roomId);
+    });
+  });
+
+  // 🛠️ 多人連線邏輯二：大夥們輸入房號加入
+  document.getElementById('btn-join-room').addEventListener('click', () => {
+    let nameInput = document.getElementById('player-name-input').value.trim();
+    let roomId = document.getElementById('room-id-input').value.trim();
+
+    if (nameInput === "") { alert(" 請先輸入玩家暱稱！"); return; }
+    if (roomId === "") { alert(" 請輸入建立的 4 位數房間號碼！"); return; }
+    playerName = nameInput;
+
+    // 去雲端檢查房間在不在
+    database.ref('rooms/' + roomId).once('value', (snapshot) => {
+      if (snapshot.exists()) {
+        currentRoomId = roomId;
+        lockRoomUI(roomId);
+        document.getElementById('connection-status').innerText = ` 成功加入房間【 ${roomId} 】！祝你手氣爆棚！`;
+        listenToRoom(roomId);
+      } else {
+        alert(" 找不到房間，請確認房號是否正確！");
+      }
+    });
+  });
+
+  // 鎖定房間區輸入欄位的 UI
+  function lockRoomUI(roomId) {
+    document.getElementById('room-id-input').value = roomId;
+    document.getElementById('btn-create-room').disabled = true;
+    document.getElementById('btn-join-room').disabled = true;
+    document.getElementById('room-id-input').disabled = true;
+    document.getElementById('player-name-input').disabled = true;
+  }
+
+  // 🛠️ 多人連線邏輯三：雲端即時同步監聽
+  function listenToRoom(roomId) {
+    document.getElementById('btn-draw').disabled = false;
+    document.getElementById('game-status').className = "badge bg-success fs-6 p-2 text-white";
+    document.getElementById('game-status').innerText = "狀態：多人連線中！";
+
+    database.ref('rooms/' + roomId).on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      // 1. 所有人同步最新的大數字
+      document.getElementById('current-draw').innerText = data.currentDraw;
+
+      // 2. 所有人同步下方落落長的歷史紀錄
+      if (data.drawnPool) {
+        let historyArray = data.drawnPool.split(',');
+        document.getElementById('draw-history').innerText = "已抽過：" + historyArray.join(', ');
+      } else {
+        document.getElementById('draw-history').innerText = "已抽過：無";
+      }
+
+      // 3. 檢查雲端上有沒有產生贏家
+      if (data.winnerName && data.winnerName !== "") {
+        document.getElementById('game-status').className = "badge bg-danger fs-6 p-2 text-white animate-bounce";
+        document.getElementById('game-status').innerText = ` 遊戲結束！贏家是：【${data.winnerName}】！`;
+        document.getElementById('btn-draw').disabled = true;
+        
+        // 如果贏家不是自己，就彈窗通知誰贏了
+        if (data.winnerName !== playerName) {
+          alert(` 殘念！本輪賓果已由【${data.winnerName}】率先清空面板，獲得勝利！`);
+        }
+      }
+    });
+  }
+
+  // 🛠️ 多人連線邏輯四：任何一人按抽號，更新雲端
+  document.getElementById('btn-draw').addEventListener('click', () => {
+    if (!currentRoomId) return;
+
+    database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
+      const data = snapshot.val();
+      
+      // 如果已經有人贏了，就不准再抽
+      if (data.winnerName && data.winnerName !== "") return;
+
+      let poolSet = new Set(data.drawnPool ? data.drawnPool.split(',') : []);
+      if (poolSet.size >= 500) { alert("1~500 數字全抽光了！"); return; }
+
+      // 智慧搖號
+      let newDraw;
+      do { newDraw = Math.floor(Math.random() * 500) + 1; } while (poolSet.has(newDraw.toString()));
+
+      poolSet.add(newDraw.toString());
+      let newPoolString = Array.from(poolSet).join(',');
+
+      // 推向雲端，這一瞬間所有加入這間房的人畫面都會跳動
+      database.ref('rooms/' + currentRoomId).update({
+        currentDraw: newDraw,
+        drawnPool: newPoolString
+      });
+    });
+  });
+
+  // 計算連線並檢查是否全開
+  function checkBingo() {
+    let lines = 0;
+    for (let r = 0; r < 5; r++) { if ([0,1,2,3,4].every(c => markedIndices.has(r * 5 + c))) lines++; }
+    for (let c = 0; c < 5; c++) { if ([0,1,2,3,4].every(r => markedIndices.has(r * 5 + c))) lines++; }
+    if ([0, 6, 12, 18, 24].every(i => markedIndices.has(i))) lines++;
+    if ([4, 8, 12, 16, 20].every(i => markedIndices.has(i))) lines++;
+
+    document.getElementById('line-count').innerText = lines;
+
+    // 終止條件：25格全部圈完
+    if (markedIndices.size === 25) {
+      // 搶先將自己的暱稱寫入雲端的 winnerName，霸佔勝利寶座！
+      database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
+        const data = snapshot.val();
+        // 確保自己是第一個寫入的（防止雙方同時剛好開完的極端情況）
+        if (!data.winnerName || data.winnerName === "") {
+          database.ref('rooms/' + currentRoomId).update({ winnerName: playerName });
+          alert(" 太神啦！你成功在全場比賽中第一個清空 25 格！獲得制霸全場的大勝利！");
+        }
+      });
+    }
+  }
+
+  // 網頁載入
+  initBoard();
+</script>
+</body>
+</html>
