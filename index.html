@@ -114,9 +114,10 @@
 
     <div class="mb-1.5">
       <select id="range-select" class="form-select form-select-sm text-center fw-bold text-success" style="font-size: 0.8rem;">
+        <option value="25" selected>遊戲數字範圍：1 ~ 25 (經典必中)</option>
         <option value="100">遊戲數字範圍：1 ~ 100</option>
         <option value="250">遊戲數字範圍：1 ~ 250</option>
-        <option value="500" selected>遊戲數字範圍：1 ~ 500</option>
+        <option value="500">遊戲數字範圍：1 ~ 500</option>
       </select>
     </div>
 
@@ -160,7 +161,7 @@
   <div class="instructions-zone shadow mt-3 mb-2">
     <h6 class="text-warning fw-bold mb-2 small" style="font-size: 0.8rem;">🎮 遊戲操作順序說明</h6>
     <ol class="text-secondary p-0 m-0 small" style="font-size: 0.75rem; padding-left: 14px !important; line-height: 1.4;">
-      <li class="mb-1 text-light">點選<span class="text-danger fw-bold">「幫我隨機填滿」</span>並鎖定，或是自己手動安排數字位置並點擊下方綠色按鈕鎖定。</li>
+      <li class="mb-1 text-light">先選擇數字範圍，點選<span class="text-danger fw-bold">「幫我隨機填滿」</span>並鎖定，或是自己手動安排數字位置並點擊下方綠色按鈕鎖定。</li>
       <li class="mb-1 text-light">於最上方欄位輸入您的<span class="text-info fw-bold">玩家暱稱</span>。</li>
       <li class="text-light">
         <span class="text-info fw-bold">單人獨自遊玩：</span>直接點擊「建立房間」即可立刻開始抽號。<br>
@@ -189,7 +190,7 @@
   let hasWinnerDeclared = false; 
   let cooldownTimer = null; 
   let myPlayerKey = null; // 用於標記自己在房間內玩家列表的唯一 Key
-  let maxNumberRange = 500; // 預設最大數字範圍為 500
+  let maxNumberRange = 25; // 💡 預設最大數字範圍同步改為 25
 
   // 🕒 監聽本地與 Firebase 伺服器的時間差，用以精準校正 5 秒限制
   let serverTimeOffset = 0;
