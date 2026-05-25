@@ -150,10 +150,10 @@
   </div>
 
   <div class="instructions-zone shadow mt-3 mb-2">
-    <h6 class="text-warning fw-bold mb-2 small" style="font-size: 0.8rem;">🎮 遊戲操作順序說明</h6>
+    <h6 class="text-warning fw-bold mb-2 small" style="font-size: 0.8rem;"> 遊戲操作順序說明</h6>
     <ol class="text-secondary p-0 m-0 small" style="font-size: 0.75rem; padding-left: 14px !important; line-height: 1.4;">
       <li class="mb-1 text-light">點選<span class="text-danger fw-bold">「幫我隨機填滿」</span>並鎖定，或是自己手動安排數字位置並點擊下方綠色按鈕鎖定。</li>
-      <li class="mb-1 text-light">於最上方欄位輸入您的<span class="text-info fw-bold">玩家暱稱</span>。</li>
+      <li class="mb-1 text-light">於最上方欄位輸入<span class="text-info fw-bold">玩家暱稱</span>。</li>
       <li class="text-light">
         <span class="text-info fw-bold">單人獨自遊玩：</span>直接點擊「建立房間」即可立刻開始抽號。<br>
         <span class="text-info fw-bold">多人連線對戰：</span>請指派其中<span class="text-warning fw-bold">一人</span>點擊「建立房間」，並將產生的 <span class="text-warning fw-bold">4 碼房號</span>給予連線友人，友人輸入相同房號後點擊「加入房間」即可同步加入戰局！
@@ -542,7 +542,7 @@
 
         let lines = calculateLines();
         updateMyProgressInCloud(lines);
-        alert(` 判定無效！你的卡片中有 ${invalidIndices.length} 個數字尚未被抽出來。遊戲繼續！`);
+        alert(` 判定無效！你的數字中有 ${invalidIndices.length} 個數字尚未被抽出來。遊戲繼續！`);
       }
     });
   }
