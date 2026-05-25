@@ -150,6 +150,12 @@
   let hasWinnerDeclared = false; 
   let cooldownTimer = null; 
 
+  // 🕒 監聽本地與 Firebase 伺服器的時間差，用以精準校正 10 秒限制
+  let serverTimeOffset = 0;
+  database.ref('/.info/serverTimeOffset').on('value', (snapshot) => {
+    serverTimeOffset = snapshot.val() || 0;
+  });
+
   // 初始化空白棋盤
   function initBoard() {
     const board = document.getElementById('bingo-board');
@@ -331,12 +337,12 @@
         document.getElementById('game-status').innerText = "狀態：多人連線中！";
       }
 
-      // ⏱️ 🔥 【核心修改】全房間同步 10 秒冷卻倒數邏輯
+      // ⏱️ 🔥 【核心修改】全房間同步 10 秒冷卻倒數邏輯（使用校正後的伺服器時間）
       if (data.lastDrawTime && !data.winnerName) {
         if (cooldownTimer) clearInterval(cooldownTimer); // 清除舊的計時器
         
-        let nowServerTime = Date.now();
-        // 計算「現在時間」與「最後抽牌時間」相差幾秒
+        let nowServerTime = Date.now() + serverTimeOffset;
+        // 計算「標準伺服器時間」與「最後抽牌時間」相差幾秒
         let secondsPassed = Math.floor((nowServerTime - data.lastDrawTime) / 1000);
         let timeLeft = 10 - secondsPassed;
 
@@ -346,7 +352,7 @@
           drawBtn.innerText = `等待 ${timeLeft} 秒...`;
 
           cooldownTimer = setInterval(() => {
-            let reCalcPassed = Math.floor((Date.now() - data.lastDrawTime) / 1000);
+            let reCalcPassed = Math.floor(((Date.now() + serverTimeOffset) - data.lastDrawTime) / 1000);
             let curTimeLeft = 10 - reCalcPassed;
             
             if (curTimeLeft <= 0) {
@@ -388,8 +394,8 @@
       const data = snapshot.val();
       if (data.winnerName && data.winnerName.trim() !== "") return;
 
-      // 檢查安全防護：如果雲端的 10 秒還沒到，前端阻擋不執行抽號
-      let nowTime = Date.now();
+      // 檢查安全防護：如果雲端的 10 秒還沒到，前端阻擋不執行抽號（使用校正後的伺服器時間）
+      let nowTime = Date.now() + serverTimeOffset;
       if (data.lastDrawTime && (nowTime - data.lastDrawTime < 10000)) {
         return; 
       }
@@ -407,7 +413,7 @@
         currentDraw: newDraw,
         drawnPool: newPoolString,
         invalidMessage: "",
-        lastDrawTime: Date.now() // 🚀 蓋上最新的抽號時間戳記，推播給所有連線手機
+        lastDrawTime: firebase.database.ServerValue.TIMESTAMP // 🚀 改用雲端標準時間戳記
       });
     });
   });
