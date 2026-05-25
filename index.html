@@ -54,6 +54,9 @@
     /* 縮減區域塊高度 */
     .draw-zone { background-color: #212529; border: 2px dashed #ffc107; border-radius: 10px; padding: 10px !important; }
     .room-zone { background-color: #2c3034; border-radius: 10px; padding: 10px !important; }
+    
+    /* 玩家名單進度區樣式 */
+    .players-progress-zone { background-color: #1f2327; border: 1px solid #0dcaf0; border-radius: 10px; padding: 8px !important; }
 
     .display-1 { font-size: 2.6rem !important; }
 
@@ -77,6 +80,15 @@
     #btn-start {
       font-size: 0.95rem;
       padding: 8px 0;
+    }
+
+    /* 底部說明書樣式 */
+    .instructions-zone {
+      background-color: #212529;
+      border: 1px solid #343a40;
+      border-radius: 10px;
+      padding: 12px !important;
+      text-align: left;
     }
 
     @media (max-width: 360px) {
@@ -108,6 +120,13 @@
     <div id="connection-status" class="text-warning fw-bold mt-1" style="font-size: 0.75rem;">請先完成下方「鎖定數字」再建立/加入房間！</div>
   </div>
 
+  <div class="players-progress-zone shadow mb-2">
+    <h6 class="text-info fw-bold mb-1 small" style="font-size: 0.75rem;">👥 房間玩家連線進度</h6>
+    <div id="players-list" class="d-flex flex-wrap justify-content-center gap-1.5 small text-light" style="font-size: 0.75rem;">
+      <span class="text-secondary">尚未進入房間...</span>
+    </div>
+  </div>
+
   <div class="draw-zone shadow mb-2">
     <h5 class="text-secondary small mb-0" style="font-size: 0.75rem;">【 抽號顯示區 】</h5>
     <div id="current-draw" class="display-1 fw-bold text-warning my-0">--</div>
@@ -129,6 +148,18 @@
     </div>
     <button id="btn-start" class="btn btn-success btn-md fw-bold w-100 shadow-sm">鎖定數字，準備開始！</button>
   </div>
+
+  <div class="instructions-zone shadow mt-3 mb-2">
+    <h6 class="text-warning fw-bold mb-2 small" style="font-size: 0.8rem;">🎮 遊戲操作順序說明</h6>
+    <ol class="text-secondary p-0 m-0 small" style="font-size: 0.75rem; padding-left: 14px !important; line-height: 1.4;">
+      <li class="mb-1 text-light">點選<span class="text-danger fw-bold">「幫我隨機填滿」</span>並鎖定，或是自己手動安排數字位置並點擊下方綠色按鈕鎖定。</li>
+      <li class="mb-1 text-light">於最上方欄位輸入您的<span class="text-info fw-bold">玩家暱稱</span>。</li>
+      <li class="text-light">
+        <span class="text-info fw-bold">單人獨自遊玩：</span>直接點擊「建立房間」即可立刻開始抽號。<br>
+        <span class="text-info fw-bold">多人連線對戰：</span>請指派其中<span class="text-warning fw-bold">一人</span>點擊「建立房間」，並將產生的 <span class="text-warning fw-bold">4 碼房號</span>給予連線友人，友人輸入相同房號後點擊「加入房間」即可同步加入戰局！
+      </li>
+    </ol>
+  </div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -149,8 +180,9 @@
   let myNumbers = []; 
   let hasWinnerDeclared = false; 
   let cooldownTimer = null; 
+  let myPlayerKey = null; // 用於標記自己在房間內玩家列表的唯一 Key
 
-  // 🕒 監聽本地與 Firebase 伺服器的時間差，用以精準校正 10 秒限制
+  // 🕒 監聽本地與 Firebase 伺服器的時間差，用以精準校正 5 秒限制
   let serverTimeOffset = 0;
   database.ref('/.info/serverTimeOffset').on('value', (snapshot) => {
     serverTimeOffset = snapshot.val() || 0;
@@ -231,7 +263,8 @@
           cell.classList.add('marked');
         }
         
-        calculateLines();
+        let lines = calculateLines();
+        updateMyProgressInCloud(lines); // 當自己的連線條數改變時，同步傳上雲端給所有人看
         
         if (markedIndices.size === 25) {
           checkFinalWinner();
@@ -269,6 +302,14 @@
     }).then(() => {
       lockRoomUI(roomId);
       document.getElementById('connection-status').innerText = ` 成功建立房號【 ${roomId} 】！快叫朋友們加入這間房間！`;
+      
+      // 將自己加入雲端玩家名單
+      const playerRef = database.ref('rooms/' + roomId + '/players').push();
+      myPlayerKey = playerRef.key;
+      playerRef.set({ name: playerName, lines: 0 });
+      // 網頁關閉時自動移除名單，避免殘留
+      playerRef.onDisconnect().remove();
+
       listenToRoom(roomId);
     }).catch(err => {
       alert("資料庫連線失敗，請檢查 Firebase databaseURL 網址或安全規則權限！");
@@ -294,6 +335,14 @@
         currentRoomId = roomId;
         lockRoomUI(roomId);
         document.getElementById('connection-status').innerText = ` 成功加入房間【 ${roomId} 】！祝你手氣爆棚！`;
+        
+        // 將自己加入雲端玩家名單
+        const playerRef = database.ref('rooms/' + roomId + '/players').push();
+        myPlayerKey = playerRef.key;
+        playerRef.set({ name: playerName, lines: 0 });
+        // 網頁關閉時自動移除名單，避免殘留
+        playerRef.onDisconnect().remove();
+
         listenToRoom(roomId);
       } else {
         alert(" 找不到房間，請確認房號是否正確！");
@@ -307,6 +356,15 @@
     document.getElementById('btn-join-room').disabled = true;
     document.getElementById('room-id-input').disabled = true;
     document.getElementById('player-name-input').disabled = true;
+  }
+
+  // 更新自己在雲端上的連線進度
+  function updateMyProgressInCloud(linesCount) {
+    if (currentRoomId && myPlayerKey) {
+      database.ref('rooms/' + currentRoomId + '/players/' + myPlayerKey).update({
+        lines: linesCount
+      });
+    }
   }
 
   // 多人連線邏輯三：雲端即時同步監聽
@@ -329,6 +387,22 @@
         document.getElementById('draw-history').innerText = "已抽過：無";
       }
 
+      // 即時渲染所有玩家的連線進度
+      if (data.players) {
+        let listHtml = "";
+        Object.keys(data.players).forEach(key => {
+          let p = data.players[key];
+          if (key === myPlayerKey) {
+            listHtml += `<span class="badge bg-dark border border-warning text-warning">${p.name} (你)：${p.lines} 條線</span>`;
+          } else {
+            listHtml += `<span class="badge bg-secondary">${p.name}：${p.lines} 條線</span>`;
+          }
+        });
+        document.getElementById('players-list').innerHTML = listHtml;
+      } else {
+        document.getElementById('players-list').innerHTML = `<span class="text-secondary">無玩家名單</span>`;
+      }
+
       if (data.invalidMessage && data.invalidMessage.trim() !== "") {
         document.getElementById('game-status').className = "badge bg-warning text-dark p-1.5 fw-bold text-wrap";
         document.getElementById('game-status').innerText = data.invalidMessage;
@@ -337,23 +411,23 @@
         document.getElementById('game-status').innerText = "狀態：多人連線中！";
       }
 
-      // ⏱️ 🔥 【核心修改】全房間同步 10 秒冷卻倒數邏輯（使用校正後的伺服器時間）
+      // ⏱️ ⚙️ 【核心修改】全房間同步 5 秒冷卻倒數邏輯
       if (data.lastDrawTime && !data.winnerName) {
         if (cooldownTimer) clearInterval(cooldownTimer); // 清除舊的計時器
         
         let nowServerTime = Date.now() + serverTimeOffset;
         // 計算「標準伺服器時間」與「最後抽牌時間」相差幾秒
         let secondsPassed = Math.floor((nowServerTime - data.lastDrawTime) / 1000);
-        let timeLeft = 10 - secondsPassed;
+        let timeLeft = 5 - secondsPassed; // 🚀 已改為 5 秒限制
 
         if (timeLeft > 0) {
-          // 如果 10 秒還沒過，強制把「全體玩家」的按鈕封鎖並顯示倒數
+          // 如果 5 秒還沒過，強制把「全體玩家」的按鈕封鎖並顯示倒數
           drawBtn.disabled = true;
           drawBtn.innerText = `等待 ${timeLeft} 秒...`;
 
           cooldownTimer = setInterval(() => {
             let reCalcPassed = Math.floor(((Date.now() + serverTimeOffset) - data.lastDrawTime) / 1000);
-            let curTimeLeft = 10 - reCalcPassed;
+            let curTimeLeft = 5 - reCalcPassed; // 🚀 已改為 5 秒限制
             
             if (curTimeLeft <= 0) {
               clearInterval(cooldownTimer);
@@ -366,7 +440,7 @@
             }
           }, 1000);
         } else {
-          // 已經超過 10 秒，解鎖按鈕
+          // 已經超過 5 秒，解鎖按鈕
           drawBtn.disabled = false;
           drawBtn.innerText = " 隨機抽號 ";
         }
@@ -394,9 +468,9 @@
       const data = snapshot.val();
       if (data.winnerName && data.winnerName.trim() !== "") return;
 
-      // 檢查安全防護：如果雲端的 10 秒還沒到，前端阻擋不執行抽號（使用校正後的伺服器時間）
+      // 後端時間防刷安全防護：如果雲端的 5 秒還沒到，前端阻擋不執行抽號
       let nowTime = Date.now() + serverTimeOffset;
-      if (data.lastDrawTime && (nowTime - data.lastDrawTime < 10000)) {
+      if (data.lastDrawTime && (nowTime - data.lastDrawTime < 5000)) { // 🚀 已改為 5000 毫秒（5秒）
         return; 
       }
 
@@ -413,7 +487,7 @@
         currentDraw: newDraw,
         drawnPool: newPoolString,
         invalidMessage: "",
-        lastDrawTime: firebase.database.ServerValue.TIMESTAMP // 🚀 改用雲端標準時間戳記
+        lastDrawTime: firebase.database.ServerValue.TIMESTAMP 
       });
     });
   });
@@ -466,7 +540,8 @@
           cells[idx].classList.remove('marked');
         });
 
-        calculateLines();
+        let lines = calculateLines();
+        updateMyProgressInCloud(lines);
         alert(` 判定無效！你的卡片中有 ${invalidIndices.length} 個數字尚未被抽出來。遊戲繼續！`);
       }
     });
