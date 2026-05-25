@@ -6,27 +6,34 @@
   <title> 多人連線 1~500 賓果遊戲 </title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background-color: #1a1d20; color: #fff; }
+    body { background-color: #1a1d20; color: #fff; padding: 10px; }
+    
+    /* 調整大外層，在手機上不要太貼邊 */
+    .container { max-width: 500px; padding-left: 5px; padding-right: 5px; }
+
+    /* 響應式 5x5 賓果盤：核心縮放機制 */
     .bingo-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-      max-width: 450px;
+      gap: 6px; /* 手機上縮小間距防止超出螢幕 */
+      max-width: 100%;
       margin: 0 auto;
     }
+    
     .bingo-cell {
       aspect-ratio: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       font-weight: bold;
       background-color: #2b3035;
       border: 2px solid #495057;
-      border-radius: 8px;
+      border-radius: 6px;
       cursor: pointer;
       transition: all 0.2s;
     }
+    
     .bingo-cell input {
       width: 100%;
       height: 100%;
@@ -35,55 +42,67 @@
       color: #ffc107;
       text-align: center;
       font-weight: bold;
-      font-size: 1.3rem;
+      font-size: 1.1rem;
     }
-    .bingo-cell input:focus { outline: none; background-color: rgba(255, 193, 7, 0.1); border-radius: 6px; }
+    .bingo-cell input:focus { outline: none; background-color: rgba(255, 193, 7, 0.1); border-radius: 4px; }
     .bingo-cell input::-webkit-outer-spin-button, .bingo-cell input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     .bingo-cell input[type=number] { -moz-appearance: textfield; }
     .bingo-cell.marked { background-color: #198754 !important; border-color: #157347; color: white; }
-    .draw-zone { background-color: #212529; border: 2px dashed #ffc107; border-radius: 10px; max-width: 450px; margin: 0 auto; }
-    .room-zone { background-color: #2c3034; border-radius: 10px; max-width: 450px; margin: 0 auto; }
+    
+    /* 調整區域塊，在手機版減少上下內縮距離（padding），釋放更多空間 */
+    .draw-zone { background-color: #212529; border: 2px dashed #ffc107; border-radius: 10px; padding: 12px !important; }
+    .room-zone { background-color: #2c3034; border-radius: 10px; padding: 12px !important; }
+
+    /* 📱 針對手機小螢幕特別微調 (螢幕寬度小於 400px 時) */
+    @media (max-width: 400px) {
+      h1 { font-size: 1.6rem !important; }
+      .display-1 { font-size: 3rem !important; } /* 縮小大抽號數字避免佔滿畫面 */
+      .bingo-cell { font-size: 0.95rem; border-width: 1px; }
+      .bingo-cell input { font-size: 0.95rem; }
+      .bingo-grid { gap: 4px; }
+      .btn { padding: 6px 12px; font-size: 0.9rem; }
+    }
   </style>
 </head>
 <body>
 
-<div class="container py-4 text-center">
-  <h1 class="mb-2 text-warning fw-bold"> 1~500 多人連線賓果</h1>
-  <p class="text-secondary small">輸入房號!立刻開始賓果!</p>
+<div class="container py-2 text-center">
+  <h1 class="mb-1 text-warning fw-bold"> 1~500 多人連線賓果</h1>
+  <p class="text-secondary small mb-2">輸入房號!立刻開始賓果!</p>
 
-  <div class="room-zone p-3 mb-4 shadow">
-    <h6 class="text-info fw-bold mb-3">請輸入暱稱與連線房號</h6>
+  <div class="room-zone p-3 mb-3 shadow">
+    <h6 class="text-info fw-bold mb-2 small">請輸入暱稱與連線房號</h6>
     
-    <div class="mb-3" style="max-width: 320px; margin: 0 auto;">
-      <input type="text" id="player-name-input" class="form-control text-center" placeholder="請輸入你的玩家暱稱 (必填)">
+    <div class="mb-2" style="max-width: 280px; margin: 0 auto;">
+      <input type="text" id="player-name-input" class="form-control form-control-sm text-center" placeholder="請輸入你的玩家暱稱 (必填)">
     </div>
 
-    <div class="input-group mb-2" style="max-width: 320px; margin: 0 auto;">
-      <input type="text" id="room-id-input" class="form-control text-center fw-bold" placeholder="輸入4位數房號">
+    <div class="input-group input-group-sm mb-1" style="max-width: 280px; margin: 0 auto;">
+      <input type="text" id="room-id-input" class="form-control text-center fw-bold" placeholder="4位數房號">
       <button id="btn-create-room" class="btn btn-info fw-bold" disabled>建立房間</button>
       <button id="btn-join-room" class="btn btn-outline-info fw-bold" disabled>加入房間</button>
     </div>
-    <div id="connection-status" class="small text-warning fw-bold mt-2">請先完成下方「鎖定數字」再建立/加入房間！</div>
+    <div id="connection-status" class="xsmall text-warning fw-bold mt-1" style="font-size: 0.8rem;">請先完成下方「鎖定數字」再建立/加入房間！</div>
   </div>
 
-  <div class="draw-zone p-3 mb-4 shadow">
-    <h5 class="text-secondary small">【 抽號顯示區 】</h5>
-    <div id="current-draw" class="display-1 fw-bold text-warning my-2">--</div>
-    <button id="btn-draw" class="btn btn-warning fw-bold px-4" disabled> 隨機抽號 </button>
-    <div id="draw-history" class="small text-muted mt-2 text-wrap" style="max-width: 100%;">已抽過：無</div>
+  <div class="draw-zone p-3 mb-3 shadow">
+    <h5 class="text-secondary small mb-1">【 抽號顯示區 】</h5>
+    <div id="current-draw" class="display-1 fw-bold text-warning my-1">--</div>
+    <button id="btn-draw" class="btn btn-warning btn-sm fw-bold px-4" disabled> 隨機抽號 </button>
+    <div id="draw-history" class="small text-muted mt-1 text-wrap text-start" style="max-width: 100%; font-size: 0.8rem; max-height: 40px; overflow-y: auto;">已抽過：無</div>
   </div>
 
-  <div class="mb-3">
-    <span class="badge bg-primary fs-6 p-2 me-2">當前連線：<span id="line-count">0</span> 條線</span>
-    <span id="game-status" class="badge bg-secondary fs-6 p-2 fw-bold">狀態：請先在格子內填寫數字</span>
+  <div class="mb-2 d-flex justify-content-center gap-1">
+    <span class="badge bg-primary p-2" style="font-size: 0.85rem;">連線：<span id="line-count">0</span> 條線</span>
+    <span id="game-status" class="badge bg-secondary p-2 fw-bold text-wrap" style="font-size: 0.85rem; max-width: 70%;">狀態：請先填寫數字</span>
   </div>
 
-  <div class="bingo-grid mb-4" id="bingo-board"></div>
+  <div class="bingo-grid mb-3" id="bingo-board"></div>
 
-  <div class="mb-5" id="setup-buttons">
-    <button id="btn-random-fill" class="btn btn-danger me-2"> 幫我隨機填滿空位</button>
-    <button id="btn-clear" class="btn btn-outline-secondary me-2"> 全部清空</button>
-    <button id="btn-start" class="btn btn-success px-4 fw-bold"> 鎖定數字，準備開始！</button>
+  <div class="mb-4 d-flex justify-content-center flex-wrap gap-2" id="setup-buttons">
+    <button id="btn-random-fill" class="btn btn-danger btn-sm">隨機填滿</button>
+    <button id="btn-clear" class="btn btn-outline-secondary btn-sm">全部清空</button>
+    <button id="btn-start" class="btn btn-success btn-sm fw-bold px-3">鎖定數字，準備開始！</button>
   </div>
 </div>
 
@@ -173,7 +192,6 @@
         if (currentRoomId === null) { alert("請先建立或加入一個連線房間！"); return; }
         if (hasWinnerDeclared) return; 
         
-        // 點擊切換標記狀態（純玩家手動自由選擇，完全不干涉）
         if (markedIndices.has(index)) {
           markedIndices.delete(index);
           cell.classList.remove('marked');
@@ -182,10 +200,8 @@
           cell.classList.add('marked');
         }
         
-        // 純粹更新畫面的連線條數供玩家參考
         calculateLines();
         
-        // 【核心變更】：只有當玩家動手把「25格全部填滿（選取）」時，代表他要結算喊賓果了！
         if (markedIndices.size === 25) {
           checkFinalWinner();
         }
@@ -198,14 +214,16 @@
     document.getElementById('btn-start').disabled = true;
     document.getElementById('btn-create-room').disabled = false;
     document.getElementById('btn-join-room').disabled = false;
-    document.getElementById('connection-status').innerText = " 數字鎖定成功！請輸入暱稱後建立或加入房間。";
+    document.getElementById('connection-status').innerText = " 數字鎖定成功！請輸入暱稱建立/加入房間。";
     document.getElementById('game-status').innerText = "狀態：等待加入連線房間...";
-    document.getElementById('game-status').className = "badge bg-warning text-dark fs-6 p-2 fw-bold";
+    document.getElementById('game-status').className = "badge bg-warning text-dark p-2 fw-bold";
   });
 
   // 多人連線邏輯一：房長建立房間
   document.getElementById('btn-create-room').addEventListener('click', () => {
-    let nameInput = document.getElementById('player-name-input').value.trim();
+    const nameField = document.getElementById('player-name-input');
+    nameField.blur(); // 強制收起手機鍵盤，確保手機輸入法完全釋放文字
+    let nameInput = nameField.value.trim();
     if (nameInput === "") { alert(" 建立房間前，請先輸入玩家暱稱！"); return; }
     playerName = nameInput;
 
@@ -216,18 +234,26 @@
       currentDraw: "--",
       drawnPool: "",
       winnerName: "",
-      invalidMessage: "" // 新增：用於廣播無效訊息給全場玩家
+      invalidMessage: ""
     }).then(() => {
       lockRoomUI(roomId);
       document.getElementById('connection-status').innerText = ` 成功建立房號【 ${roomId} 】！快叫朋友們加入這間房間！`;
       listenToRoom(roomId);
+    }).catch(err => {
+      // 增加錯誤提示：如果是資料庫沒開，會在手機上彈出警告
+      alert("資料庫連線失敗，請檢查 Firebase databaseURL 網址或安全規則權限！");
     });
   });
 
   // 多人連線邏輯二：大夥們輸入房號加入
   document.getElementById('btn-join-room').addEventListener('click', () => {
-    let nameInput = document.getElementById('player-name-input').value.trim();
-    let roomId = document.getElementById('room-id-input').value.trim();
+    const nameField = document.getElementById('player-name-input');
+    const roomField = document.getElementById('room-id-input');
+    nameField.blur();
+    roomField.blur();
+
+    let nameInput = nameField.value.trim();
+    let roomId = roomField.value.trim();
 
     if (nameInput === "") { alert(" 請先輸入玩家暱稱！"); return; }
     if (roomId === "") { alert(" 請輸入建立的 4 位數房間號碼！"); return; }
@@ -256,17 +282,15 @@
   // 多人連線邏輯三：雲端即時同步監聽
   function listenToRoom(roomId) {
     document.getElementById('btn-draw').disabled = false;
-    document.getElementById('game-status').className = "badge bg-success fs-6 p-2 text-white";
+    document.getElementById('game-status').className = "badge bg-success p-2 text-white";
     document.getElementById('game-status').innerText = "狀態：多人連線中！";
 
     database.ref('rooms/' + roomId).on('value', (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
 
-      // 1. 同步最新的抽號大數字
       document.getElementById('current-draw').innerText = data.currentDraw;
 
-      // 2. 同步歷史抽號紀錄
       if (data.drawnPool && data.drawnPool.trim() !== "") {
         let historyArray = data.drawnPool.split(',');
         document.getElementById('draw-history').innerText = "已抽過：" + historyArray.join(', ');
@@ -274,19 +298,17 @@
         document.getElementById('draw-history').innerText = "已抽過：無";
       }
 
-      // 3. 監聽是否有對獎無效的廣播訊息（全場通知）
       if (data.invalidMessage && data.invalidMessage.trim() !== "") {
-        document.getElementById('game-status').className = "badge bg-warning text-dark fs-6 p-2 fw-bold";
+        document.getElementById('game-status').className = "badge bg-warning text-dark p-2 fw-bold";
         document.getElementById('game-status').innerText = data.invalidMessage;
       } else if (!data.winnerName) {
-        document.getElementById('game-status').className = "badge bg-success fs-6 p-2 text-white";
+        document.getElementById('game-status').className = "badge bg-success p-2 text-white";
         document.getElementById('game-status').innerText = "狀態：多人連線中！";
       }
 
-      // 4. 檢查雲端是否有「真正」贏家產生
       if (data.winnerName && data.winnerName.trim() !== "") {
         hasWinnerDeclared = true;
-        document.getElementById('game-status').className = "badge bg-danger fs-6 p-2 text-white";
+        document.getElementById('game-status').className = "badge bg-danger p-2 text-white";
         document.getElementById('game-status').innerText = ` 遊戲結束！贏家是：【${data.winnerName}】！`;
         document.getElementById('btn-draw').disabled = true;
         
@@ -314,7 +336,6 @@
       poolSet.add(newDraw.toString());
       let newPoolString = Array.from(poolSet).join(',');
 
-      // 抽新號碼時，順便把之前的「無效廣播訊息」清空，恢復正常狀態
       database.ref('rooms/' + currentRoomId).update({
         currentDraw: newDraw,
         drawnPool: newPoolString,
@@ -323,7 +344,7 @@
     });
   });
 
-  // 計算並即時渲染畫面的總連線數
+  // 計算連線
   function calculateLines() {
     let lines = 0;
     for (let r = 0; r < 5; r++) { if ([0,1,2,3,4].every(c => markedIndices.has(r * 5 + c))) lines++; }
@@ -335,7 +356,7 @@
     return lines;
   }
 
-  // 終局檢查：當玩家手動點滿 25 格時觸發
+  // 終局檢查
   function checkFinalWinner() {
     database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
       const data = snapshot.val();
@@ -344,47 +365,39 @@
       let serverPoolArray = data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : [];
       let serverPoolSet = new Set(serverPoolArray);
 
-      let invalidIndices = []; // 紀錄有哪些格子是「作弊/點錯（沒被抽過）」的
+      let invalidIndices = [];
 
-      // 檢查目前玩家在棋盤上填滿的 25 個數字
       for (let index of markedIndices) {
         let cellNumber = myNumbers[index].toString();
         if (!serverPoolSet.has(cellNumber)) {
-          invalidIndices.push(index); // 抓到沒抽過的數字了！
+          invalidIndices.push(index);
         }
       }
 
       if (invalidIndices.length === 0) {
-        // 全數通過審查！確實通通抽過，真正獲勝！
         database.ref('rooms/' + currentRoomId).update({ 
           winnerName: playerName,
           invalidMessage: ""
         });
         alert(" 太神啦！你成功全選 25 格且全數符合！獲得制霸全場的大勝利！");
       } else {
-        // ❌ 判定無效！將無效訊息同步上傳雲端，通知所有人
         let broadcastMsg = `【${playerName}】宣告全選無效！卡片含有未抽出的數字！`;
         database.ref('rooms/' + currentRoomId).update({ 
           invalidMessage: broadcastMsg
         });
 
-        // 【回復機制】：針對這名點錯的玩家，自動幫他把「沒被抽到的數字格子」恢復成未選取的灰色
         const cells = document.querySelectorAll('.bingo-cell');
         invalidIndices.forEach(idx => {
-          markedIndices.delete(idx);         // 從已點選名單移除
-          cells[idx].classList.remove('marked'); // 拔掉綠色樣式，恢復灰色
+          markedIndices.delete(idx);
+          cells[idx].classList.remove('marked');
         });
 
-        // 重新計算更新降下來的連線數
         calculateLines();
-
-        // 僅對該名出錯的玩家彈出提醒
         alert(` 判定無效！你的卡片中有 ${invalidIndices.length} 個數字尚未被抽出來。遊戲繼續！`);
       }
     });
   }
 
-  // 網頁載入
   initBoard();
 </script>
 </body>
