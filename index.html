@@ -17,7 +17,7 @@
       grid-template-columns: repeat(5, 1fr);
       gap: 6px; 
       max-width: 100%;
-      margin: 12px auto; /* 增加上下外距，與按鈕拉開距離 */
+      margin: 12px auto;
     }
     
     .bingo-cell {
@@ -51,13 +51,13 @@
     .bingo-cell input::placeholder { color: #6c757d; opacity: 0.7; }
     .bingo-cell.marked { background-color: #198754 !important; border-color: #157347; color: white; }
     
-    /* 縮減區域塊高度，釋放垂直空間 */
+    /* 縮減區域塊高度 */
     .draw-zone { background-color: #212529; border: 2px dashed #ffc107; border-radius: 10px; padding: 10px !important; }
     .room-zone { background-color: #2c3034; border-radius: 10px; padding: 10px !important; }
 
-    .display-1 { font-size: 2.6rem !important; } /* 縮小抽號大字數字，避免撐開畫面 */
+    .display-1 { font-size: 2.6rem !important; }
 
-    /* 下方功能按鈕區：緊湊排版並確保不與格子重疊 */
+    /* 下方功能按鈕區 */
     .setup-actions-container {
       display: flex;
       flex-direction: column;
@@ -79,7 +79,6 @@
       padding: 8px 0;
     }
 
-    /* 📱 針對極小螢幕手機再微調 */
     @media (max-width: 360px) {
       .container { padding-left: 10px; padding-right: 10px; }
       .bingo-cell { font-size: 1rem; }
@@ -149,7 +148,7 @@
   let playerName = "無名氏";
   let myNumbers = []; 
   let hasWinnerDeclared = false; 
-  let cooldownTimer = null; // ⌛ 倒數計時器計時用
+  let cooldownTimer = null; 
 
   // 初始化空白棋盤
   function initBoard() {
@@ -234,7 +233,6 @@
       });
     });
 
-    // 解鎖連線功能
     document.getElementById('btn-random-fill').disabled = true;
     document.getElementById('btn-clear').disabled = true;
     document.getElementById('btn-start').disabled = true;
@@ -260,7 +258,8 @@
       currentDraw: "--",
       drawnPool: "",
       winnerName: "",
-      invalidMessage: ""
+      invalidMessage: "",
+      lastDrawTime: 0 // 🕒 用於記錄全世界最後一次抽號的時間戳記
     }).then(() => {
       lockRoomUI(roomId);
       document.getElementById('connection-status').innerText = ` 成功建立房號【 ${roomId} 】！快叫朋友們加入這間房間！`;
@@ -306,7 +305,8 @@
 
   // 多人連線邏輯三：雲端即時同步監聽
   function listenToRoom(roomId) {
-    document.getElementById('btn-draw').disabled = false;
+    const drawBtn = document.getElementById('btn-draw');
+    drawBtn.disabled = false;
     document.getElementById('game-status').className = "badge bg-success p-1.5 text-white text-wrap";
     document.getElementById('game-status').innerText = "狀態：多人連線中！";
 
@@ -331,12 +331,47 @@
         document.getElementById('game-status').innerText = "狀態：多人連線中！";
       }
 
+      // ⏱️ 🔥 【核心修改】全房間同步 10 秒冷卻倒數邏輯
+      if (data.lastDrawTime && !data.winnerName) {
+        if (cooldownTimer) clearInterval(cooldownTimer); // 清除舊的計時器
+        
+        let nowServerTime = Date.now();
+        // 計算「現在時間」與「最後抽牌時間」相差幾秒
+        let secondsPassed = Math.floor((nowServerTime - data.lastDrawTime) / 1000);
+        let timeLeft = 10 - secondsPassed;
+
+        if (timeLeft > 0) {
+          // 如果 10 秒還沒過，強制把「全體玩家」的按鈕封鎖並顯示倒數
+          drawBtn.disabled = true;
+          drawBtn.innerText = `等待 ${timeLeft} 秒...`;
+
+          cooldownTimer = setInterval(() => {
+            let reCalcPassed = Math.floor((Date.now() - data.lastDrawTime) / 1000);
+            let curTimeLeft = 10 - reCalcPassed;
+            
+            if (curTimeLeft <= 0) {
+              clearInterval(cooldownTimer);
+              if (!hasWinnerDeclared) {
+                drawBtn.disabled = false;
+                drawBtn.innerText = " 隨機抽號 ";
+              }
+            } else {
+              drawBtn.innerText = `等待 ${curTimeLeft} 秒...`;
+            }
+          }, 1000);
+        } else {
+          // 已經超過 10 秒，解鎖按鈕
+          drawBtn.disabled = false;
+          drawBtn.innerText = " 隨機抽號 ";
+        }
+      }
+
       if (data.winnerName && data.winnerName.trim() !== "") {
         hasWinnerDeclared = true;
         document.getElementById('game-status').className = "badge bg-danger p-1.5 text-white text-wrap";
         document.getElementById('game-status').innerText = ` 遊戲結束！贏家是：【${data.winnerName}】！`;
-        document.getElementById('btn-draw').disabled = true;
-        if (cooldownTimer) clearInterval(cooldownTimer); // 結束時清除倒數
+        drawBtn.disabled = true;
+        if (cooldownTimer) clearInterval(cooldownTimer);
         
         if (data.winnerName !== playerName) {
           alert(` 殘念！本輪賓果已由【${data.winnerName}】成功全選，獲得最終勝利！`);
@@ -345,16 +380,19 @@
     });
   }
 
-  // 多人連線邏輯四：按鈕抽號更新雲端（加入 10 秒冷卻防連點機制）
+  // 多人連線邏輯四：按鈕抽號更新雲端
   document.getElementById('btn-draw').addEventListener('click', () => {
     if (!currentRoomId || hasWinnerDeclared) return;
-
-    const drawBtn = document.getElementById('btn-draw');
-    drawBtn.disabled = true; // 鎖定按鈕
 
     database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
       const data = snapshot.val();
       if (data.winnerName && data.winnerName.trim() !== "") return;
+
+      // 檢查安全防護：如果雲端的 10 秒還沒到，前端阻擋不執行抽號
+      let nowTime = Date.now();
+      if (data.lastDrawTime && (nowTime - data.lastDrawTime < 10000)) {
+        return; 
+      }
 
       let poolSet = new Set(data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : []);
       if (poolSet.size >= 500) { alert("1~500 數字全抽光了！"); return; }
@@ -368,24 +406,8 @@
       database.ref('rooms/' + currentRoomId).update({
         currentDraw: newDraw,
         drawnPool: newPoolString,
-        invalidMessage: ""
-      }).then(() => {
-        // 🔥 進入 10 秒冷卻倒數
-        let timeLeft = 10;
-        drawBtn.innerText = `等待 ${timeLeft} 秒...`;
-        
-        cooldownTimer = setInterval(() => {
-          timeLeft--;
-          if (timeLeft <= 0) {
-            clearInterval(cooldownTimer);
-            if (!hasWinnerDeclared) {
-              drawBtn.disabled = false;
-              drawBtn.innerText = " 隨機抽號 ";
-            }
-          } else {
-            drawBtn.innerText = `等待 ${timeLeft} 秒...`;
-          }
-        }, 1000);
+        invalidMessage: "",
+        lastDrawTime: Date.now() // 🚀 蓋上最新的抽號時間戳記，推播給所有連線手機
       });
     });
   });
