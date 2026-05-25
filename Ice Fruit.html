@@ -363,7 +363,7 @@
         alert(" 太神啦！你成功全選 25 格且全數符合！獲得制霸全場的大勝利！");
       } else {
         // ❌ 判定無效！將無效訊息同步上傳雲端，通知所有人
-        let broadcastMsg = `❌ 玩家【${playerName}】宣告全選無效！卡片含有未抽出的數字！`;
+        let broadcastMsg = `【${playerName}】宣告全選無效！卡片含有未抽出的數字！`;
         database.ref('rooms/' + currentRoomId).update({ 
           invalidMessage: broadcastMsg
         });
@@ -379,7 +379,7 @@
         calculateLines();
 
         // 僅對該名出錯的玩家彈出提醒
-        alert(` 判定無效！你的卡片中有 ${invalidIndices.length} 個數字尚未被抽出來，已自動幫你恢復未選取狀態。遊戲繼續！`);
+        alert(` 判定無效！你的卡片中有 ${invalidIndices.length} 個數字尚未被抽出來。遊戲繼續！`);
       }
     });
   }
