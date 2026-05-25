@@ -112,6 +112,14 @@
       <input type="text" id="player-name-input" class="form-control form-control-sm text-center" placeholder="請輸入你的玩家暱稱 (必填)" style="font-size: 0.8rem;">
     </div>
 
+    <div class="mb-1.5">
+      <select id="range-select" class="form-select form-select-sm text-center fw-bold text-success" style="font-size: 0.8rem;">
+        <option value="100">遊戲數字範圍：1 ~ 100</option>
+        <option value="250">遊戲數字範圍：1 ~ 250</option>
+        <option value="500" selected>遊戲數字範圍：1 ~ 500</option>
+      </select>
+    </div>
+
     <div class="input-group input-group-sm mb-0">
       <input type="text" id="room-id-input" class="form-control text-center fw-bold" placeholder="4位數房號" style="font-size: 0.8rem;">
       <button id="btn-create-room" class="btn btn-info fw-bold" disabled style="font-size: 0.8rem;">建立房間</button>
@@ -131,7 +139,7 @@
     <h5 class="text-secondary small mb-0" style="font-size: 0.75rem;">【 抽號顯示區 】</h5>
     <div id="current-draw" class="display-1 fw-bold text-warning my-0">--</div>
     <button id="btn-draw" class="btn btn-warning btn-sm fw-bold px-3 py-1" disabled style="font-size: 0.8rem;"> 隨機抽號 </button>
-    <div id="draw-history" class="small text-muted mt-1 text-wrap text-start" style="max-width: 100%; font-size: 0.7rem; max-height: 32px; overflow-y: auto;">已抽過：無</div>
+    <div id="draw-history" class="small text-muted mt-1 text-wrap text-start" style="max-width: 100%; font-size: 0.7 shadow; max-height: 32px; overflow-y: auto;">已抽過：無</div>
   </div>
 
   <div class="mb-1 d-flex justify-content-center gap-1.5">
@@ -181,11 +189,20 @@
   let hasWinnerDeclared = false; 
   let cooldownTimer = null; 
   let myPlayerKey = null; // 用於標記自己在房間內玩家列表的唯一 Key
+  let maxNumberRange = 500; // 預設最大數字範圍為 500
 
   // 🕒 監聽本地與 Firebase 伺服器的時間差，用以精準校正 5 秒限制
   let serverTimeOffset = 0;
   database.ref('/.info/serverTimeOffset').on('value', (snapshot) => {
     serverTimeOffset = snapshot.val() || 0;
+  });
+
+  // 監聽下拉選單，動態切換輸入框的 max 屬性與 placeholder
+  document.getElementById('range-select').addEventListener('change', (e) => {
+    maxNumberRange = parseInt(e.target.value);
+    document.querySelectorAll('.bingo-cell input').forEach(input => {
+      input.max = maxNumberRange;
+    });
   });
 
   // 初始化空白棋盤
@@ -197,7 +214,7 @@
       const cell = document.createElement('div');
       cell.className = 'bingo-cell';
       const input = document.createElement('input');
-      input.type = 'number'; input.min = 1; input.max = 500; input.placeholder = '?';
+      input.type = 'number'; input.min = 1; input.max = maxNumberRange; input.placeholder = '?';
       cell.appendChild(input);
       board.appendChild(cell);
     }
@@ -210,13 +227,13 @@
     let pool = new Set();
     inputs.forEach(input => {
       let val = parseInt(input.value);
-      if (!isNaN(val) && val >= 1 && val <= 500) pool.add(val);
+      if (!isNaN(val) && val >= 1 && val <= maxNumberRange) pool.add(val);
     });
     inputs.forEach(input => {
       let val = parseInt(input.value);
-      if (isNaN(val) || val < 1 || val > 500) {
+      if (isNaN(val) || val < 1 || val > maxNumberRange) {
         let rand;
-        do { rand = Math.floor(Math.random() * 500) + 1; } while (pool.has(rand));
+        do { rand = Math.floor(Math.random() * maxNumberRange) + 1; } while (pool.has(rand));
         pool.add(rand);
         input.value = rand;
       }
@@ -238,12 +255,12 @@
     inputs.forEach(input => {
       let val = parseInt(input.value);
       if (isNaN(val)) hasEmpty = true;
-      else if (val < 1 || val > 500) hasOutOfRange = true;
+      else if (val < 1 || val > maxNumberRange) hasOutOfRange = true;
       else { myNumbers.push(val); checkSet.add(val); }
     });
 
     if (hasEmpty) { alert(" 請把 25 個格子全部填滿！"); return; }
-    if (hasOutOfRange) { alert(" 數字必須在 1 到 500 之間！"); return; }
+    if (hasOutOfRange) { alert(` 數字必須在 1 到 ${maxNumberRange} 之間！`); return; }
     if (checkSet.size < 25) { alert(" 數字不能重複！"); return; }
 
     isGameStarted = true;
@@ -272,6 +289,7 @@
       });
     });
 
+    document.getElementById('range-select').disabled = true; // 鎖定範圍選擇
     document.getElementById('btn-random-fill').disabled = true;
     document.getElementById('btn-clear').disabled = true;
     document.getElementById('btn-start').disabled = true;
@@ -298,7 +316,8 @@
       drawnPool: "",
       winnerName: "",
       invalidMessage: "",
-      lastDrawTime: 0 
+      lastDrawTime: 0,
+      maxRange: maxNumberRange // 將房長選定的數字範圍記錄到雲端房間內
     }).then(() => {
       lockRoomUI(roomId);
       document.getElementById('connection-status').innerText = ` 成功建立房號【 ${roomId} 】！快叫朋友們加入這間房間！`;
@@ -340,6 +359,14 @@
 
     database.ref('rooms/' + roomId).once('value', (snapshot) => {
       if (snapshot.exists()) {
+        const roomData = snapshot.val();
+        
+        // 驗證加入者的數字範圍是否與房長建立的一致
+        if(roomData.maxRange && roomData.maxRange !== maxNumberRange) {
+          alert(`範圍不符！該房間設定的遊戲範圍是 1 ~ ${roomData.maxRange}，請重新調整你的數字範圍後再加入！`);
+          return;
+        }
+
         currentRoomId = roomId;
         lockRoomUI(roomId);
         document.getElementById('connection-status').innerText = ` 成功加入房間【 ${roomId} 】！祝你手氣爆棚！`;
@@ -372,6 +399,7 @@
     document.getElementById('btn-join-room').disabled = true;
     document.getElementById('room-id-input').disabled = true;
     document.getElementById('player-name-input').disabled = true;
+    document.getElementById('range-select').disabled = true;
   }
 
   // 更新自己在雲端上的連線進度
@@ -393,6 +421,12 @@
     database.ref('rooms/' + roomId).on('value', (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
+
+      // 同步雲端房間的數字範圍
+      if(data.maxRange) {
+        maxNumberRange = data.maxRange;
+        document.getElementById('range-select').value = maxNumberRange;
+      }
 
       document.getElementById('current-draw').innerText = data.currentDraw;
 
@@ -487,10 +521,10 @@
       }
 
       let poolSet = new Set(data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : []);
-      if (poolSet.size >= 500) { alert("1~500 數字全抽光了！"); return; }
+      if (poolSet.size >= maxNumberRange) { alert(`1~${maxNumberRange} 數字全抽光了！`); return; }
 
       let newDraw;
-      do { newDraw = Math.floor(Math.random() * 500) + 1; } while (poolSet.has(newDraw.toString()));
+      do { newDraw = Math.floor(Math.random() * maxNumberRange) + 1; } while (poolSet.has(newDraw.toString()));
 
       poolSet.add(newDraw.toString());
       let newPoolString = Array.from(poolSet).join(',');
