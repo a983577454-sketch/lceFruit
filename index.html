@@ -108,16 +108,23 @@
   <div class="room-zone shadow mb-2">
     <h6 class="text-info fw-bold mb-1 small" style="font-size: 0.75rem;">請輸入暱稱與連線房號</h6>
     
-    <div class="mb-1.5">
+    <div class="mb-1">
       <input type="text" id="player-name-input" class="form-control form-control-sm text-center" placeholder="請輸入你的玩家暱稱 (必填)" style="font-size: 0.8rem;">
     </div>
 
-    <div class="mb-1.5">
+    <div class="mb-1">
       <select id="range-select" class="form-select form-select-sm text-center fw-bold text-success" style="font-size: 0.8rem;">
         <option value="25" selected>遊戲數字範圍：1 ~ 25 (經典必中)</option>
         <option value="100">遊戲數字範圍：1 ~ 100</option>
         <option value="250">遊戲數字範圍：1 ~ 250</option>
         <option value="500">遊戲數字範圍：1 ~ 500</option>
+      </select>
+    </div>
+
+    <div class="mb-1.5">
+      <select id="mode-select" class="form-select form-select-sm text-center fw-bold text-primary" style="font-size: 0.8rem;">
+        <option value="random" selected>遊戲玩法：系統隨機抽號</option>
+        <option value="call">遊戲玩法：玩家輪流喊號 (點擊棋盤喊號)</option>
       </select>
     </div>
 
@@ -137,9 +144,12 @@
   </div>
 
   <div class="draw-zone shadow mb-2">
-    <h5 class="text-secondary small mb-0" style="font-size: 0.75rem;">【 抽號顯示區 】</h5>
+    <h5 id="draw-zone-title" class="text-secondary small mb-0" style="font-size: 0.75rem;">【 抽號顯示區 】</h5>
     <div id="current-draw" class="display-1 fw-bold text-warning my-0">--</div>
-    <button id="btn-draw" class="btn btn-warning btn-sm fw-bold px-3 py-1" disabled style="font-size: 0.8rem;"> 隨機抽號 </button>
+    <div class="d-flex justify-content-center gap-2 mb-1">
+      <button id="btn-draw" class="btn btn-warning btn-sm fw-bold px-3 py-1" disabled style="font-size: 0.8rem;"> 隨機抽號 </button>
+      <button id="btn-restart" class="btn btn-success btn-sm fw-bold px-3 py-1 d-none" style="font-size: 0.8rem;"> 再來一局 </button>
+    </div>
     <div id="draw-history" class="small text-muted mt-1 text-wrap text-start" style="max-width: 100%; font-size: 0.7 shadow; max-height: 32px; overflow-y: auto;">已抽過：無</div>
   </div>
 
@@ -161,11 +171,12 @@
   <div class="instructions-zone shadow mt-3 mb-2">
     <h6 class="text-warning fw-bold mb-2 small" style="font-size: 0.8rem;"> 遊戲操作順序說明</h6>
     <ol class="text-secondary p-0 m-0 small" style="font-size: 0.75rem; padding-left: 14px !important; line-height: 1.4;">
-      <li class="mb-1 text-light">先選擇數字範圍，點選<span class="text-danger fw-bold">「幫我隨機填滿」</span>並鎖定，或是自己手動安排數字位置並點擊下方綠色按鈕鎖定。</li>
+      <li class="mb-1 text-light">先選擇數字範圍與<span class="text-primary fw-bold">遊戲玩法（抽號/喊號）</span>，點選<span class="text-danger fw-bold">「幫我隨機填滿」</span>並鎖定，或是自己手動安排數字位置並點擊下方綠色按鈕鎖定。</li>
       <li class="mb-1 text-light">於最上方欄位輸入<span class="text-info fw-bold">玩家暱稱</span>。</li>
       <li class="text-light">
-        <span class="text-info fw-bold">單人獨自遊玩：</span>直接點擊「建立房間」即可立刻開始抽號。<br>
-        <span class="text-info fw-bold">多人連線對戰：</span>請指派其中<span class="text-warning fw-bold">一人</span>點擊「建立房間」，並將產生的 <span class="text-warning fw-bold">4 碼房號</span>給予連線友人，友人輸入相同房號後點擊「加入房間」即可同步加入戰局！
+        <span class="text-info fw-bold">單人獨自遊玩：</span>直接點擊「建立房間」即可立刻開始遊戲。<br>
+        <span class="text-info fw-bold">多人連線對戰：</span>請指派其中<span class="text-warning fw-bold">一人</span>點擊「建立房間」，並將產生的 <span class="text-warning fw-bold">4 碼房號</span>給予連線友人，友人輸入相同房號後點擊「加入房間」即可同步加入戰局！<br>
+        <span class="text-primary fw-bold">💡 輪流喊號提示：</span>若選擇輪流喊號，遊戲開始後不論是誰喊的號碼，**所有玩家都必須自己手動點擊格子來蓋章綠燈**。如果點到別人早就喊過的號碼，系統會提醒你並直接幫你完成手動蓋章，不會重複喊號！
       </li>
     </ol>
   </div>
@@ -175,7 +186,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
 <script>
-  // 💥 免費公共雲端資料庫
   const firebaseConfig = {
     databaseURL: "https://bingo-game-ac045-default-rtdb.asia-southeast1.firebasedatabase.app/"
   };
@@ -189,16 +199,15 @@
   let myNumbers = []; 
   let hasWinnerDeclared = false; 
   let cooldownTimer = null; 
-  let myPlayerKey = null; // 用於標記自己在房間內玩家列表的唯一 Key
-  let maxNumberRange = 25; // 💡 預設最大數字範圍同步改為 25
+  let myPlayerKey = null; 
+  let maxNumberRange = 25; 
+  let gameMode = "random"; 
 
-  // 🕒 監聽本地與 Firebase 伺服器的時間差，用以精準校正 5 秒限制
   let serverTimeOffset = 0;
   database.ref('/.info/serverTimeOffset').on('value', (snapshot) => {
     serverTimeOffset = snapshot.val() || 0;
   });
 
-  // 監聽下拉選單，動態切換輸入框的 max 屬性與 placeholder
   document.getElementById('range-select').addEventListener('change', (e) => {
     maxNumberRange = parseInt(e.target.value);
     document.querySelectorAll('.bingo-cell input').forEach(input => {
@@ -206,7 +215,10 @@
     });
   });
 
-  // 初始化空白棋盤
+  document.getElementById('mode-select').addEventListener('change', (e) => {
+    gameMode = e.target.value;
+  });
+
   function initBoard() {
     const board = document.getElementById('bingo-board');
     board.innerHTML = '';
@@ -221,7 +233,6 @@
     }
   }
 
-  // 智慧型填滿數字
   document.getElementById('btn-random-fill').addEventListener('click', () => {
     if (isGameStarted) return;
     const inputs = document.querySelectorAll('.bingo-cell input');
@@ -246,7 +257,6 @@
     document.querySelectorAll('.bingo-cell input').forEach(input => input.value = '');
   });
 
-  // 鎖定卡片數字，解鎖房間按鈕
   document.getElementById('btn-start').addEventListener('click', () => {
     const inputs = document.querySelectorAll('.bingo-cell input');
     let checkSet = new Set();
@@ -265,32 +275,10 @@
     if (checkSet.size < 25) { alert(" 數字不能重複！"); return; }
 
     isGameStarted = true;
-    
-    const cells = document.querySelectorAll('.bingo-cell');
-    cells.forEach((cell, index) => {
-      cell.innerHTML = myNumbers[index];
-      cell.addEventListener('click', () => {
-        if (currentRoomId === null) { alert("請先建立或加入一個連線房間！"); return; }
-        if (hasWinnerDeclared) return; 
-        
-        if (markedIndices.has(index)) {
-          markedIndices.delete(index);
-          cell.classList.remove('marked');
-        } else {
-          markedIndices.add(index);
-          cell.classList.add('marked');
-        }
-        
-        let lines = calculateLines();
-        updateMyProgressInCloud(lines); // 當自己的連線條數改變時，同步傳上雲端給所有人看
-        
-        if (markedIndices.size === 25) {
-          checkFinalWinner();
-        }
-      });
-    });
+    setupBoardClickEvents();
 
-    document.getElementById('range-select').disabled = true; // 鎖定範圍選擇
+    document.getElementById('range-select').disabled = true; 
+    document.getElementById('mode-select').disabled = true; 
     document.getElementById('btn-random-fill').disabled = true;
     document.getElementById('btn-clear').disabled = true;
     document.getElementById('btn-start').disabled = true;
@@ -300,6 +288,88 @@
     document.getElementById('game-status').innerText = "狀態：等待加入連線房間...";
     document.getElementById('game-status').className = "badge bg-warning text-dark p-1.5 fw-bold text-wrap";
   });
+
+  function setupBoardClickEvents() {
+    const cells = document.querySelectorAll('.bingo-cell');
+    cells.forEach((cell, index) => {
+      cell.innerHTML = myNumbers[index];
+      cell.onclick = null;
+      cell.onclick = () => {
+        if (currentRoomId === null) { alert("請先建立或加入一個連線房間！"); return; }
+        if (hasWinnerDeclared) return; 
+        
+        let cellNumberString = myNumbers[index].toString();
+
+        database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data.winnerName) return;
+
+          let poolSet = new Set(data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : []);
+          
+          if (gameMode === "call") {
+            // 【玩家喊號模式】
+            if (poolSet.has(cellNumberString)) {
+              //  玩家點選了「已被前位玩家喊過」的號碼 -> 觸發手動蓋章/消章
+              toggleLocalMark(cell, index);
+              alert(`【提醒】數字 ${cellNumberString} 之前已經有人喊過囉！已為您直接手動標記綠燈。請換別的格子來喊新數字！`);
+            } else {
+              //  還沒人喊過 -> 視為大聲喊號！
+              let nowTime = Date.now() + serverTimeOffset;
+              if (data.lastDrawTime && (nowTime - data.lastDrawTime < 5000)) { 
+                alert("喊號太快了，請等待冷卻時間！");
+                return; 
+              }
+
+              // 喊號成功時，本地也順便蓋章（因為是自己喊的）
+              if (!markedIndices.has(index)) {
+                markedIndices.add(index);
+                cell.classList.add('marked');
+              }
+
+              poolSet.add(cellNumberString);
+              let newPoolString = Array.from(poolSet).join(',');
+
+              database.ref('rooms/' + currentRoomId).update({
+                currentDraw: cellNumberString,
+                drawnPool: newPoolString,
+                invalidMessage: "",
+                lastDrawTime: firebase.database.ServerValue.TIMESTAMP 
+              });
+
+              let lines = calculateLines();
+              updateMyProgressInCloud(lines);
+              if (markedIndices.size === 25) checkFinalWinner();
+            }
+          } else {
+            //  【系統抽號模式】傳統手動蓋章（必須是已被抽出的數字才行）
+            if (!serverPoolSet.has(cellNumberString)) {
+              alert(`數字 ${cellNumberString} 還沒被抽出來，不能選喔！`);
+              return;
+            }
+            toggleLocalMark(cell, index);
+          }
+        });
+      };
+    });
+  }
+
+  // 純本地切換標記與計算連線
+  function toggleLocalMark(cell, index) {
+    if (markedIndices.has(index)) {
+      markedIndices.delete(index);
+      cell.classList.remove('marked');
+    } else {
+      markedIndices.add(index);
+      cell.classList.add('marked');
+    }
+    
+    let lines = calculateLines();
+    updateMyProgressInCloud(lines);
+    
+    if (markedIndices.size === 25) {
+      checkFinalWinner();
+    }
+  }
 
   // 多人連線邏輯一：房長建立房間
   document.getElementById('btn-create-room').addEventListener('click', () => {
@@ -318,18 +388,16 @@
       winnerName: "",
       invalidMessage: "",
       lastDrawTime: 0,
-      maxRange: maxNumberRange // 將房長選定的數字範圍記錄到雲端房間內
+      maxRange: maxNumberRange,
+      gameMode: gameMode 
     }).then(() => {
       lockRoomUI(roomId);
       document.getElementById('connection-status').innerText = ` 成功建立房號【 ${roomId} 】！快叫朋友們加入這間房間！`;
       
-      // 將自己加入雲端玩家名單
       const playerRef = database.ref('rooms/' + roomId + '/players').push();
       myPlayerKey = playerRef.key;
       playerRef.set({ name: playerName, lines: 0 });
 
-      // ⏱️ ⚙️【核心新增：自毀觸發器】當網頁斷線或關閉時
-      // 先移除自己，並檢查房間如果空了就全間刪除
       playerRef.onDisconnect().remove().then(() => {
         database.ref('rooms/' + roomId + '/players').onDisconnect().withPriority(0).once('value', (snap) => {
           if (!snap.exists() || snap.numChildren() === 0) {
@@ -340,11 +408,11 @@
 
       listenToRoom(roomId);
     }).catch(err => {
-      alert("資料庫連線失敗，請檢查 Firebase databaseURL 網址或安全規則權限！");
+      alert("資料庫連線失敗，請檢查 Firebase 權限！");
     });
   });
 
-  // 多人連線邏輯二：大夥們輸入房號加入
+  // 多人連線邏輯二：加入房間
   document.getElementById('btn-join-room').addEventListener('click', () => {
     const nameField = document.getElementById('player-name-input');
     const roomField = document.getElementById('room-id-input');
@@ -362,28 +430,29 @@
       if (snapshot.exists()) {
         const roomData = snapshot.val();
         
-        // 驗證加入者的數字範圍是否與房長建立的一致
         if(roomData.maxRange && roomData.maxRange !== maxNumberRange) {
           alert(`範圍不符！該房間設定的遊戲範圍是 1 ~ ${roomData.maxRange}，請重新調整你的數字範圍後再加入！`);
           return;
+        }
+
+        if (roomData.gameMode) {
+          gameMode = roomData.gameMode;
+          document.getElementById('mode-select').value = gameMode;
         }
 
         currentRoomId = roomId;
         lockRoomUI(roomId);
         document.getElementById('connection-status').innerText = ` 成功加入房間【 ${roomId} 】！祝你手氣爆棚！`;
         
-        // 將自己加入雲端玩家名單
         const playerRef = database.ref('rooms/' + roomId + '/players').push();
         myPlayerKey = playerRef.key;
         playerRef.set({ name: playerName, lines: 0 });
 
-        // ⏱️ ⚙️【核心新增：自毀觸發器】當網頁斷線或關閉時
-        // 先移除自己，並檢查房間如果空了就全間刪除
         playerRef.onDisconnect().remove().then(() => {
           database.ref('rooms/' + roomId + '/players').onDisconnect().withPriority(0).once('value', (snap) => {
             if (!snap.exists() || snap.numChildren() === 0) {
               database.ref('rooms/' + roomId).remove();
-            }
+          }
           });
         });
 
@@ -401,9 +470,9 @@
     document.getElementById('room-id-input').disabled = true;
     document.getElementById('player-name-input').disabled = true;
     document.getElementById('range-select').disabled = true;
+    document.getElementById('mode-select').disabled = true;
   }
 
-  // 更新自己在雲端上的連線進度
   function updateMyProgressInCloud(linesCount) {
     if (currentRoomId && myPlayerKey) {
       database.ref('rooms/' + currentRoomId + '/players/' + myPlayerKey).update({
@@ -415,7 +484,8 @@
   // 多人連線邏輯三：雲端即時同步監聽
   function listenToRoom(roomId) {
     const drawBtn = document.getElementById('btn-draw');
-    drawBtn.disabled = false;
+    const restartBtn = document.getElementById('btn-restart');
+    
     document.getElementById('game-status').className = "badge bg-success p-1.5 text-white text-wrap";
     document.getElementById('game-status').innerText = "狀態：多人連線中！";
 
@@ -423,22 +493,38 @@
       const data = snapshot.val();
       if (!data) return;
 
-      // 同步雲端房間的數字範圍
+      if (hasWinnerDeclared && (!data.winnerName || data.winnerName.trim() === "")) {
+        resetLocalGameRound();
+      }
+
       if(data.maxRange) {
         maxNumberRange = data.maxRange;
         document.getElementById('range-select').value = maxNumberRange;
       }
 
-      document.getElementById('current-draw').innerText = data.currentDraw;
-
-      if (data.drawnPool && data.drawnPool.trim() !== "") {
-        let historyArray = data.drawnPool.split(',');
-        document.getElementById('draw-history').innerText = "已抽過：" + historyArray.join(', ');
-      } else {
-        document.getElementById('draw-history').innerText = "已抽過：無";
+      if(data.gameMode) {
+        gameMode = data.gameMode;
+        document.getElementById('mode-select').value = gameMode;
+        if (gameMode === "call") {
+          drawBtn.classList.add('d-none'); 
+          document.getElementById('draw-zone-title').innerText = "【 玩家喊號顯示區 】";
+        } else {
+          drawBtn.classList.remove('d-none');
+          document.getElementById('draw-zone-title').innerText = "【 抽號顯示區 】";
+        }
       }
 
-      // 即時渲染所有玩家的連線進度
+      document.getElementById('current-draw').innerText = data.currentDraw;
+
+      let serverPoolArray = data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : [];
+
+      if (serverPoolArray.length > 0) {
+        document.getElementById('draw-history').innerText = (gameMode === "call" ? "已喊過：" : "已抽過：") + serverPoolArray.join(', ');
+      } else {
+        document.getElementById('draw-history').innerText = (gameMode === "call" ? "已喊過：無" : "已抽過：無");
+      }
+
+      // 👥 即時渲染所有玩家的連線進度
       if (data.players) {
         let listHtml = "";
         Object.keys(data.players).forEach(key => {
@@ -462,7 +548,7 @@
         document.getElementById('game-status').innerText = "狀態：多人連線中！";
       }
 
-      // 全房間同步 5 秒冷卻倒數邏輯
+      // 5 秒冷卻倒數邏輯
       if (data.lastDrawTime && !data.winnerName) {
         if (cooldownTimer) clearInterval(cooldownTimer); 
         
@@ -472,7 +558,12 @@
 
         if (timeLeft > 0) {
           drawBtn.disabled = true;
-          drawBtn.innerText = `等待 ${timeLeft} 秒...`;
+          let btnText = `等待 ${timeLeft} 秒...`;
+          drawBtn.innerText = btnText;
+          if (gameMode === "call") {
+            document.getElementById('game-status').className = "badge bg-warning text-dark p-1.5 fw-bold text-wrap";
+            document.getElementById('game-status').innerText = `狀態：喊號冷卻中... (${timeLeft}s)`;
+          }
 
           cooldownTimer = setInterval(() => {
             let reCalcPassed = Math.floor(((Date.now() + serverTimeOffset) - data.lastDrawTime) / 1000);
@@ -483,14 +574,25 @@
               if (!hasWinnerDeclared) {
                 drawBtn.disabled = false;
                 drawBtn.innerText = " 隨機抽號 ";
+                if (gameMode === "call") {
+                  document.getElementById('game-status').className = "badge bg-success p-1.5 text-white text-wrap";
+                  document.getElementById('game-status').innerText = "狀態：請下一位玩家點擊棋盤喊號！";
+                }
               }
             } else {
               drawBtn.innerText = `等待 ${curTimeLeft} 秒...`;
+              if (gameMode === "call") {
+                document.getElementById('game-status').innerText = `狀態：喊號冷卻中... (${curTimeLeft}s)`;
+              }
             }
           }, 1000);
         } else {
           drawBtn.disabled = false;
           drawBtn.innerText = " 隨機抽號 ";
+          if (gameMode === "call") {
+            document.getElementById('game-status').className = "badge bg-success p-1.5 text-white text-wrap";
+            document.getElementById('game-status').innerText = "狀態：請下一位玩家點擊棋盤喊號！";
+          }
         }
       }
 
@@ -499,27 +601,33 @@
         document.getElementById('game-status').className = "badge bg-danger p-1.5 text-white text-wrap";
         document.getElementById('game-status').innerText = ` 遊戲結束！贏家是：【${data.winnerName}】！`;
         drawBtn.disabled = true;
+        
+        restartBtn.classList.remove('d-none');
+
         if (cooldownTimer) clearInterval(cooldownTimer);
         
-        if (data.winnerName !== playerName) {
-          alert(` 殘念！本輪賓果已由【${data.winnerName}】成功全選，獲得最終勝利！`);
+        if (snapshot.vc_winner !== data.winnerName) {
+          snapshot.vc_winner = data.winnerName;
+          if (data.winnerName !== playerName) {
+            alert(` 殘念！本輪賓果已由【${data.winnerName}】成功全選，獲得最終勝利！`);
+          }
         }
+      } else {
+        restartBtn.classList.add('d-none');
       }
     });
   }
 
-  // 多人連線邏輯四：按鈕抽號更新雲端
+  // 隨機抽號按鈕點擊事件（僅在隨機抽號模式有效）
   document.getElementById('btn-draw').addEventListener('click', () => {
-    if (!currentRoomId || hasWinnerDeclared) return;
+    if (!currentRoomId || hasWinnerDeclared || gameMode === "call") return;
 
     database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
       const data = snapshot.val();
       if (data.winnerName && data.winnerName.trim() !== "") return;
 
       let nowTime = Date.now() + serverTimeOffset;
-      if (data.lastDrawTime && (nowTime - data.lastDrawTime < 5000)) { 
-        return; 
-      }
+      if (data.lastDrawTime && (nowTime - data.lastDrawTime < 5000)) return; 
 
       let poolSet = new Set(data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : []);
       if (poolSet.size >= maxNumberRange) { alert(`1~${maxNumberRange} 數字全抽光了！`); return; }
@@ -539,7 +647,51 @@
     });
   });
 
-  // 計算連線
+  document.getElementById('btn-restart').addEventListener('click', () => {
+    if (!currentRoomId) return;
+    
+    database.ref('rooms/' + currentRoomId + '/players').once('value', (snapshot) => {
+      if (snapshot.exists()) {
+        let playersData = snapshot.val();
+        let updates = {};
+        Object.keys(playersData).forEach(key => {
+          updates[key + '/lines'] = 0;
+        });
+        database.ref('rooms/' + currentRoomId + '/players').update(updates);
+      }
+    });
+
+    database.ref('rooms/' + currentRoomId).update({
+      currentDraw: "--",
+      drawnPool: "",
+      winnerName: "",
+      invalidMessage: "",
+      lastDrawTime: 0
+    }).then(() => {
+      document.getElementById('btn-restart').classList.add('d-none');
+    });
+  });
+
+  function resetLocalGameRound() {
+    hasWinnerDeclared = false;
+    markedIndices.clear();
+    document.getElementById('line-count').innerText = "0";
+    
+    const cells = document.querySelectorAll('.bingo-cell');
+    cells.forEach(cell => {
+      cell.classList.remove('marked');
+    });
+
+    const drawBtn = document.getElementById('btn-draw');
+    drawBtn.disabled = false;
+    drawBtn.innerText = " 隨機抽號 ";
+
+    document.getElementById('game-status').className = "badge bg-success p-1.5 text-white text-wrap";
+    document.getElementById('game-status').innerText = "狀態：多人連線中！新對局開始！";
+    
+    setupBoardClickEvents();
+  }
+
   function calculateLines() {
     let lines = 0;
     for (let r = 0; r < 5; r++) { if ([0,1,2,3,4].every(c => markedIndices.has(r * 5 + c))) lines++; }
@@ -551,7 +703,7 @@
     return lines;
   }
 
-  // 終局檢查
+  // 終局防作弊審查：確認點亮的 25 格是不是都真的有出現在雲端的已喊/已抽清單內
   function checkFinalWinner() {
     database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
       const data = snapshot.val();
@@ -561,7 +713,6 @@
       let serverPoolSet = new Set(serverPoolArray);
 
       let invalidIndices = [];
-
       for (let index of markedIndices) {
         let cellNumber = myNumbers[index].toString();
         if (!serverPoolSet.has(cellNumber)) {
@@ -576,7 +727,7 @@
         });
         alert(" 太神啦！你成功全選 25 格且全數符合！獲得制霸全場的大勝利！");
       } else {
-        let broadcastMsg = `【${playerName}】宣告全選無效！卡片含有未抽出的數字！`;
+        let broadcastMsg = `【${playerName}】宣告全選無效！含有尚未抽/喊出的數字！`;
         database.ref('rooms/' + currentRoomId).update({ 
           invalidMessage: broadcastMsg
         });
@@ -589,7 +740,7 @@
 
         let lines = calculateLines();
         updateMyProgressInCloud(lines);
-        alert(` 判定無效！你的數字中有 ${invalidIndices.length} 個數字尚未被抽出來。遊戲繼續！`);
+        alert(` 判定無效！你的數字中有 ${invalidIndices.length} 個還沒被抽/喊過。遊戲繼續！`);
       }
     });
   }
