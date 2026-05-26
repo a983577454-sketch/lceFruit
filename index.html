@@ -176,7 +176,7 @@
       <li class="text-light">
         <span class="text-info fw-bold">單人獨自遊玩：</span>直接點擊「建立房間」即可立刻開始遊戲。<br>
         <span class="text-info fw-bold">多人連線對戰：</span>請指派其中<span class="text-warning fw-bold">一人</span>點擊「建立房間」，並將產生的 <span class="text-warning fw-bold">4 碼房號</span>給予連線友人，友人輸入相同房號後點擊「加入房間」即可同步加入戰局！<br>
-        <span class="text-primary fw-bold"> 輪流喊號提示：</span>若選擇輪流喊號，遊戲開始後不論是誰喊的號碼，**所有玩家都必須手動點擊格子**。如果點到別人喊過的號碼，會直接幫你點亮或消燈，不會受到冷卻時間限制，更不會重複喊號！
+        <span class="text-primary fw-bold"> 輪流喊號提示：</span>若選擇輪流喊號，遊戲開始後會由<b>建立房間的房長先選號</b>。不論是誰喊的號碼，在 5 秒冷卻時間內<b>所有人都可以直接點擊盤面上對應的號碼標記</b>，不會受到冷卻提示阻擋！
       </li>
     </ol>
   </div>
@@ -202,7 +202,7 @@
   let myPlayerKey = null; 
   let maxNumberRange = 25; 
   let gameMode = "random"; 
-  let globalServerPoolSet = new Set(); // 新增全域變數，方便系統模式與喊號模式對照
+  let globalServerPoolSet = new Set(); 
 
   let serverTimeOffset = 0;
   database.ref('/.info/serverTimeOffset').on('value', (snapshot) => {
@@ -306,21 +306,26 @@
           if (data.winnerName) return;
 
           let poolSet = new Set(data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : []);
+          let nowTime = Date.now() + serverTimeOffset;
+          let isInCooldown = data.lastDrawTime && (nowTime - data.lastDrawTime < 5000);
           
           if (gameMode === "call") {
             // 【玩家喊號模式】
-            if (poolSet.has(cellNumberString)) {
-              // 修正核心：如果點選的數字在已喊過清單中，不管是不是在冷卻時間內，都允許直接本地蓋章/消章
+            if (poolSet.has(cellNumberString) || (isInCooldown && data.currentDraw == cellNumberString)) {
+              // 核心修正：如果點選的是「已喊過」或「正在冷卻中的當次喊號數字」，任何人都可以自由標記/消標
               toggleLocalMark(cell, index);
             } else {
-              // 還沒人喊過 -> 嘗試大聲喊號！此時才需要嚴格檢查 5 秒冷卻
-              let nowTime = Date.now() + serverTimeOffset;
-              if (data.lastDrawTime && (nowTime - data.lastDrawTime < 5000)) { 
-                alert("喊號冷卻中！但如果上一位玩家喊的數字在你的盤面上，你可以直接點擊它進行綠燈標記！");
+              // 想要喊新號碼：必須輪到自己，且不能在 5 秒全域冷卻內
+              if (data.currentCallerKey !== myPlayerKey) {
+                alert(`現在是【${data.currentCallerName}】的選號回合，請稍等！`);
+                return;
+              }
+              if (isInCooldown) {
+                alert("喊號冷卻中！請等待倒數結束再喊新號碼。");
                 return; 
               }
 
-              // 喊號成功時，本地也蓋章
+              // 喊新號碼成功，自己先蓋章
               if (!markedIndices.has(index)) {
                 markedIndices.add(index);
                 cell.classList.add('marked');
@@ -329,11 +334,24 @@
               poolSet.add(cellNumberString);
               let newPoolString = Array.from(poolSet).join(',');
 
+              // 計算下一位輪到的玩家
+              let nextCallerKey = myPlayerKey;
+              let nextCallerName = playerName;
+              if (data.players) {
+                let keys = Object.keys(data.players);
+                let myIdx = keys.indexOf(myPlayerKey);
+                let nextIdx = (myIdx + 1) % keys.length;
+                nextCallerKey = keys[nextIdx];
+                nextCallerName = data.players[nextCallerKey].name;
+              }
+
               database.ref('rooms/' + currentRoomId).update({
                 currentDraw: cellNumberString,
                 drawnPool: newPoolString,
                 invalidMessage: "",
-                lastDrawTime: firebase.database.ServerValue.TIMESTAMP 
+                lastDrawTime: firebase.database.ServerValue.TIMESTAMP,
+                currentCallerKey: nextCallerKey,
+                currentCallerName: nextCallerName
               });
 
               let lines = calculateLines();
@@ -353,7 +371,6 @@
     });
   }
 
-  // 純本地切換標記與計算連線
   function toggleLocalMark(cell, index) {
     if (markedIndices.has(index)) {
       markedIndices.delete(index);
@@ -382,6 +399,9 @@
     let roomId = Math.floor(1000 + Math.random() * 9000).toString();
     currentRoomId = roomId;
 
+    const newPlayerRef = database.ref('rooms/' + roomId + '/players').push();
+    myPlayerKey = newPlayerRef.key;
+
     database.ref('rooms/' + roomId).set({
       currentDraw: "--",
       drawnPool: "",
@@ -389,16 +409,16 @@
       invalidMessage: "",
       lastDrawTime: 0,
       maxRange: maxNumberRange,
-      gameMode: gameMode 
+      gameMode: gameMode,
+      currentCallerKey: myPlayerKey,  // 房長先選號
+      currentCallerName: playerName
     }).then(() => {
       lockRoomUI(roomId);
       document.getElementById('connection-status').innerText = ` 成功建立房號【 ${roomId} 】！快叫朋友們加入這間房間！`;
       
-      const playerRef = database.ref('rooms/' + roomId + '/players').push();
-      myPlayerKey = playerRef.key;
-      playerRef.set({ name: playerName, lines: 0 });
+      newPlayerRef.set({ name: playerName, lines: 0 });
 
-      playerRef.onDisconnect().remove().then(() => {
+      newPlayerRef.onDisconnect().remove().then(() => {
         database.ref('rooms/' + roomId + '/players').onDisconnect().withPriority(0).once('value', (snap) => {
           if (!snap.exists() || snap.numChildren() === 0) {
             database.ref('rooms/' + roomId).remove();
@@ -507,7 +527,6 @@
         document.getElementById('mode-select').value = gameMode;
         if (gameMode === "call") {
           drawBtn.classList.add('d-none'); 
-          document.getElementById('draw-zone-title').innerText = "【 玩家喊號顯示區 】";
         } else {
           drawBtn.classList.remove('d-none');
           document.getElementById('draw-zone-title').innerText = "【 抽號顯示區 】";
@@ -517,7 +536,7 @@
       document.getElementById('current-draw').innerText = data.currentDraw;
 
       let serverPoolArray = data.drawnPool && data.drawnPool.trim() !== "" ? data.drawnPool.split(',') : [];
-      globalServerPoolSet = new Set(serverPoolArray); // 更新全域 Set 供蓋章功能判斷
+      globalServerPoolSet = new Set(serverPoolArray); 
 
       if (serverPoolArray.length > 0) {
         document.getElementById('draw-history').innerText = (gameMode === "call" ? "已喊過：" : "已抽過：") + serverPoolArray.join(', ');
@@ -549,21 +568,31 @@
         document.getElementById('game-status').innerText = "狀態：多人連線中！";
       }
 
-      // 5 秒冷卻倒數邏輯
+      // 核心顯示邏輯：喊號模式抬頭文字動態更新
+      let nowServerTime = Date.now() + serverTimeOffset;
+      let isInCooldown = data.lastDrawTime && (nowServerTime - data.lastDrawTime < 5000);
+
+      if (gameMode === "call" && data.currentCallerName) {
+        if (data.currentCallerKey === myPlayerKey) {
+          document.getElementById('draw-zone-title').innerHTML = `<span class="text-danger fw-bold">🔥 換你選號了，請點擊盤面！</span>`;
+        } else {
+          document.getElementById('draw-zone-title').innerHTML = `<span class="text-info">等待【 ${data.currentCallerName} 】選號...</span>`;
+        }
+      }
+
+      // 5 秒全域冷卻倒數邏輯
       if (data.lastDrawTime && !data.winnerName) {
         if (cooldownTimer) clearInterval(cooldownTimer); 
         
-        let nowServerTime = Date.now() + serverTimeOffset;
         let secondsPassed = Math.floor((nowServerTime - data.lastDrawTime) / 1000);
         let timeLeft = 5 - secondsPassed; 
 
         if (timeLeft > 0) {
           drawBtn.disabled = true;
-          let btnText = `等待 ${timeLeft} 秒...`;
-          drawBtn.innerText = btnText;
+          drawBtn.innerText = `等待 ${timeLeft} 秒...`;
           if (gameMode === "call") {
             document.getElementById('game-status').className = "badge bg-warning text-dark p-1.5 fw-bold text-wrap";
-            document.getElementById('game-status').innerText = `狀態：喊號冷卻中... (${timeLeft}s) 盤面有相同號碼可直接點擊！`;
+            document.getElementById('game-status').innerText = `狀態：同步冷卻中 (${timeLeft}s) 盤面有相同號碼可直接點擊！`;
           }
 
           cooldownTimer = setInterval(() => {
@@ -577,13 +606,13 @@
                 drawBtn.innerText = " 隨機抽號 ";
                 if (gameMode === "call") {
                   document.getElementById('game-status').className = "badge bg-success p-1.5 text-white text-wrap";
-                  document.getElementById('game-status').innerText = "狀態：請下一位玩家點擊棋盤喊號！";
+                  document.getElementById('game-status').innerText = data.currentCallerKey === myPlayerKey ? "狀態：換你喊號囉！" : `狀態：請等待【${data.currentCallerName}】喊號！`;
                 }
               }
             } else {
               drawBtn.innerText = `等待 ${curTimeLeft} 秒...`;
               if (gameMode === "call") {
-                document.getElementById('game-status').innerText = `狀態：喊號冷卻中... (${curTimeLeft}s) 盤面有相同號碼可直接點擊！`;
+                document.getElementById('game-status').innerText = `狀態：同步冷卻中 (${curTimeLeft}s) 盤面有相同號碼可直接點擊！`;
               }
             }
           }, 1000);
@@ -592,7 +621,7 @@
           drawBtn.innerText = " 隨機抽號 ";
           if (gameMode === "call") {
             document.getElementById('game-status').className = "badge bg-success p-1.5 text-white text-wrap";
-            document.getElementById('game-status').innerText = "狀態：請下一位玩家點擊棋盤喊號！";
+            document.getElementById('game-status').innerText = data.currentCallerKey === myPlayerKey ? "狀態：換你喊號囉！" : `狀態：請等待【${data.currentCallerName}】喊號！`;
           }
         }
       }
@@ -655,21 +684,25 @@
       if (snapshot.exists()) {
         let playersData = snapshot.val();
         let updates = {};
-        Object.keys(playersData).forEach(key => {
+        let keys = Object.keys(playersData);
+        keys.forEach(key => {
           updates[key + '/lines'] = 0;
         });
         database.ref('rooms/' + currentRoomId + '/players').update(updates);
-      }
-    });
 
-    database.ref('rooms/' + currentRoomId).update({
-      currentDraw: "--",
-      drawnPool: "",
-      winnerName: "",
-      invalidMessage: "",
-      lastDrawTime: 0
-    }).then(() => {
-      document.getElementById('btn-restart').classList.add('d-none');
+        // 重置新一局時，讓本局重開的人或預設首位（這裡設回房長或第一個 key 擁有者）為先手
+        database.ref('rooms/' + currentRoomId).update({
+          currentDraw: "--",
+          drawnPool: "",
+          winnerName: "",
+          invalidMessage: "",
+          lastDrawTime: 0,
+          currentCallerKey: keys[0],
+          currentCallerName: playersData[keys[0]].name
+        }).then(() => {
+          document.getElementById('btn-restart').classList.add('d-none');
+        });
+      }
     });
   });
 
@@ -704,7 +737,6 @@
     return lines;
   }
 
-  // 終局防作弊審查：確認點亮的 25 格是不是都真的有出現在雲端的已喊/已抽清單內
   function checkFinalWinner() {
     database.ref('rooms/' + currentRoomId).once('value', (snapshot) => {
       const data = snapshot.val();
