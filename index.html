@@ -60,13 +60,13 @@
 
     .display-1 { font-size: 2.6rem !important; }
 
-    /* 下方功能按鈕區 */
+    /* 下方功能按鈕區：調大上邊距（margin-top 改為 18px），隔開與格子的距離 */
     .setup-actions-container {
       display: flex;
       flex-direction: column;
       gap: 6px;
       max-width: 100%;
-      margin: 8px auto 0 auto;
+      margin: 18px auto 0 auto;
     }
     .setup-actions-row {
       display: flex;
@@ -108,11 +108,11 @@
   <div class="room-zone shadow mb-2">
     <h6 class="text-info fw-bold mb-1 small" style="font-size: 0.75rem;">請輸入暱稱與連線房號</h6>
     
-    <div class="mb-1">
+    <div class="mb-2">
       <input type="text" id="player-name-input" class="form-control form-control-sm text-center" placeholder="請輸入你的玩家暱稱 (必填)" style="font-size: 0.8rem;">
     </div>
 
-    <div class="mb-1">
+    <div class="mb-2">
       <select id="range-select" class="form-select form-select-sm text-center fw-bold text-success" style="font-size: 0.8rem;">
         <option value="25" selected>遊戲數字範圍：1 ~ 25 (經典必中)</option>
         <option value="100">遊戲數字範圍：1 ~ 100</option>
@@ -121,14 +121,14 @@
       </select>
     </div>
 
-    <div class="mb-1.5">
+    <div class="mb-2">
       <select id="mode-select" class="form-select form-select-sm text-center fw-bold text-primary" style="font-size: 0.8rem;">
         <option value="random" selected>遊戲玩法：系統隨機抽號</option>
-        <option value="call">遊戲玩法：玩家輪流喊號 (點擊棋盤喊號)</option>
+        <option value="call">遊戲玩法：玩家輪流喊號</option>
       </select>
     </div>
 
-    <div class="input-group input-group-sm mb-0">
+    <div class="input-group input-group-sm mb-0 mt-2">
       <input type="text" id="room-id-input" class="form-control text-center fw-bold" placeholder="4位數房號" style="font-size: 0.8rem;">
       <button id="btn-create-room" class="btn btn-info fw-bold" disabled style="font-size: 0.8rem;">建立房間</button>
       <button id="btn-join-room" class="btn btn-outline-info fw-bold" disabled style="font-size: 0.8rem;">加入房間</button>
@@ -176,7 +176,7 @@
       <li class="text-light">
         <span class="text-info fw-bold">單人獨自遊玩：</span>直接點擊「建立房間」即可立刻開始遊戲。<br>
         <span class="text-info fw-bold">多人連線對戰：</span>請指派其中<span class="text-warning fw-bold">一人</span>點擊「建立房間」，並將產生的 <span class="text-warning fw-bold">4 碼房號</span>給予連線友人，友人輸入相同房號後點擊「加入房間」即可同步加入戰局！<br>
-        <span class="text-primary fw-bold">💡 輪流喊號提示：</span>若選擇輪流喊號，遊戲開始後不論是誰喊的號碼，**所有玩家都必須自己手動點擊格子來蓋章綠燈**。如果點到別人早就喊過的號碼，系統會提醒你並直接幫你完成手動蓋章，不會重複喊號！
+        <span class="text-primary fw-bold"> 輪流喊號提示：</span>若選擇輪流喊號，遊戲開始後不論是誰喊的號碼，**所有玩家都必須手動點擊格子**。如果點到別人喊過的號碼，會提醒你並直接幫你點亮，不會重複喊號！
       </li>
     </ol>
   </div>
